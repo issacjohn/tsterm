@@ -1,0 +1,297 @@
+{
+  "id": "cisco-nxos",
+  "name": "Cisco Nexus (NX-OS)",
+  "vendor": "Cisco",
+  "family": "Switch",
+  "description": "Cisco Nexus NX-OS switches. vPC, port-channels, BGP/OSPF, Ethanalyzer, AAA, FEX, multicast, and system health.",
+  "aliases": ["nexus", "nxos", "nx-os", "nexus 9000", "nexus 7000", "nexus 3000"],
+  "notes": [
+    "Most commands require network-admin or a privileged role.",
+    "Ethanalyzer captures are bounded; press Ctrl+C to stop early.",
+    "Use 'terminal length 0' or the NX-OS equivalent to avoid paging."
+  ],
+  "categories": [
+    { "id": "capture", "name": "Packet capture", "description": "Ethanalyzer on inband or management." },
+    { "id": "connectivity", "name": "Connectivity", "description": "Ping, traceroute, route, ARP, and interface status." },
+    { "id": "switching", "name": "Switching", "description": "vPC, port-channels, LACP, STP, MAC, and FEX." },
+    { "id": "routing", "name": "Routing", "description": "BGP, OSPF, routes, and next-hop checks." },
+    { "id": "aaa", "name": "AAA / RADIUS", "description": "RADIUS servers, statistics, and debug." },
+    { "id": "system", "name": "System health", "description": "CPU, memory, logs, environment, and processes." },
+    { "id": "multicast", "name": "Multicast", "description": "PIM, mroute, and IGMP state." },
+    { "id": "nat", "name": "NAT", "description": "NX-OS NAT translations and statistics." }
+  ],
+  "workflows": [
+    {
+      "id": "ethanalyzer-host",
+      "title": "Ethanalyzer — host to host",
+      "category": "capture",
+      "summary": "Capture a bounded packet sample for a host pair with Ethanalyzer and save it to bootflash.",
+      "keywords": ["ethanalyzer", "packet capture", "pcap", "nexus", "host", "sniffer"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["network-admin", "bootflash space"],
+      "variables": [
+        { "name": "iface", "prompt": "Capture interface", "type": "choice", "default": "inband", "choices": ["inband", "mgmt0"] },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        { "command": "ethanalyzer local interface {iface} capture-filter \"host {src} and host {dst}\" limit-captured-frames 500 write bootflash:tstcap.pcap", "note": "Bounded to 500 frames. Saves a pcap on bootflash." },
+        { "command": "ethanalyzer local interface {iface} capture-filter \"host {src} and host {dst}\" limit-captured-frames 100", "note": "Shows a short live sample on screen. Press Ctrl+C to stop early." },
+        { "command": "dir bootflash:tstcap.pcap", "note": "Verify the capture file exists." }
+      ],
+      "notes": [
+        "Copy the pcap off the switch with 'copy bootflash:tstcap.pcap scp://user@server/tmp/' if you need a packet tool.",
+        "The capture is bounded, so no debugs are left running."
+      ]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity check",
+      "category": "connectivity",
+      "summary": "Ping, trace, route lookup, ARP, and interface summary.",
+      "keywords": ["ping", "traceroute", "route", "arp", "connectivity"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "variables": [
+        { "name": "dst", "prompt": "Target IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "ping {dst} count 5",
+        "traceroute {dst}",
+        "show ip route {dst}",
+        "show ip arp | include {dst}",
+        "show interface brief"
+      ]
+    },
+    {
+      "id": "vpc-health",
+      "title": "vPC health and consistency",
+      "category": "switching",
+      "summary": "Check vPC peering, keepalive, role, global consistency, and port-channel state.",
+      "keywords": ["vpc", "peer-link", "keepalive", "consistency", "nexus", "dual control plane"],
+      "tags": ["vpc"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "steps": [
+        "show vpc",
+        "show vpc role",
+        "show vpc peer-keepalive",
+        "show vpc consistency-parameters global",
+        "show port-channel summary"
+      ],
+      "notes": ["Check the peer-link first: a down peer-link suspends vPC member ports."]
+    },
+    {
+      "id": "port-channel",
+      "title": "Port-channel and LACP",
+      "category": "switching",
+      "summary": "Inspect a port-channel, member links, LACP neighbors, and configuration.",
+      "keywords": ["port-channel", "lacp", "etherchannel", "member", "switchport"],
+      "tags": ["switching"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "variables": [
+        { "name": "po", "prompt": "Port-channel number", "type": "int", "default": "1", "min": 1, "max": 4096 }
+      ],
+      "steps": [
+        "show port-channel summary",
+        "show lacp neighbor interface port-channel{po}",
+        "show running-config interface port-channel{po}",
+        "show interface port-channel{po}"
+      ]
+    },
+    {
+      "id": "bgp-status",
+      "title": "BGP neighbor health",
+      "category": "routing",
+      "summary": "Inspect BGP summary, one neighbor, advertised routes, and the BGP RIB.",
+      "keywords": ["bgp", "neighbor", "peer", "advertised", "routing"],
+      "tags": ["bgp"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "variables": [
+        { "name": "neighbor", "prompt": "BGP neighbor IP", "type": "ip", "default": "203.0.113.1" }
+      ],
+      "steps": [
+        "show bgp ipv4 unicast summary",
+        "show bgp ipv4 unicast neighbors {neighbor}",
+        "show bgp ipv4 unicast neighbors {neighbor} advertised-routes",
+        "show ip route bgp"
+      ]
+    },
+    {
+      "id": "ospf-status",
+      "title": "OSPF neighbor and route health",
+      "category": "routing",
+      "summary": "Check OSPF neighbors, interfaces, and learned routes.",
+      "keywords": ["ospf", "neighbor", "routing", "interface"],
+      "tags": ["ospf"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "steps": [
+        "show ip ospf neighbors",
+        "show ip ospf interface brief",
+        "show ip route ospf"
+      ]
+    },
+    {
+      "id": "radius-status",
+      "title": "RADIUS server status",
+      "category": "aaa",
+      "summary": "Inspect RADIUS servers, statistics, AAA groups, and authentication configuration.",
+      "keywords": ["radius", "aaa", "server", "statistics", "authentication"],
+      "tags": ["radius"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "steps": [
+        "show radius-server",
+        "show radius-server statistics",
+        "show aaa groups",
+        "show running-config | include radius|aaa"
+      ]
+    },
+    {
+      "id": "radius-debug",
+      "title": "RADIUS debugs",
+      "category": "aaa",
+      "summary": "Enable NX-OS RADIUS and AAA debugs for an authentication failure.",
+      "keywords": ["radius", "debug", "aaa", "authentication", "login"],
+      "tags": ["radius", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["network-admin", "maintenance window"],
+      "steps": [
+        "debug radius all",
+        "debug aaa all",
+        { "instruction": "Trigger the authentication attempt, then inspect the log." },
+        "show logging logfile | include RADIUS",
+        "show radius-server statistics"
+      ],
+      "cleanup": [
+        "no debug radius all",
+        "no debug aaa all",
+        "no debug all"
+      ],
+      "notes": ["The final 'no debug all' is a safety net. Review the command reference for your NX-OS release."]
+    },
+    {
+      "id": "system-health",
+      "title": "System health snapshot",
+      "category": "system",
+      "summary": "Version, resources, CPU processes, environment, and recent logs.",
+      "keywords": ["health", "cpu", "memory", "processes", "logs", "environment"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "steps": [
+        "show version",
+        "show system resources",
+        "show processes cpu sort",
+        "show environment",
+        "show logging logfile"
+      ]
+    },
+    {
+      "id": "interface-triage",
+      "title": "Interface triage",
+      "category": "connectivity",
+      "summary": "Check link state, counters, errors, and configuration for one interface.",
+      "keywords": ["interface", "errors", "counters", "link", "ethernet"],
+      "tags": ["interface"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "Ethernet1/1" }
+      ],
+      "steps": [
+        "show interface {iface}",
+        "show interface {iface} counters errors",
+        "show interface {iface} brief",
+        "show running-config interface {iface}"
+      ]
+    },
+    {
+      "id": "spanning-tree",
+      "title": "Spanning tree and MAC table",
+      "category": "switching",
+      "summary": "Inspect STP state, MAC learning, and interface status for a loop or blackhole.",
+      "keywords": ["spanning-tree", "stp", "mac", "loop", "vlan"],
+      "tags": ["switching"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "variables": [
+        { "name": "vlan", "prompt": "VLAN ID", "type": "int", "default": "1", "min": 1, "max": 4094 }
+      ],
+      "steps": [
+        "show spanning-tree summary",
+        "show spanning-tree vlan {vlan}",
+        "show mac address-table",
+        "show interface brief"
+      ]
+    },
+    {
+      "id": "fex-status",
+      "title": "FEX and fabric extender status",
+      "category": "switching",
+      "summary": "Check fabric extender connectivity, host interfaces, and FEX details.",
+      "keywords": ["fex", "fabric extender", "satellite", "host interface"],
+      "tags": ["fex"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "variables": [
+        { "name": "fex", "prompt": "FEX ID", "type": "int", "default": "100", "min": 100, "max": 199 }
+      ],
+      "steps": [
+        "show fex",
+        "show fex detail",
+        "show fex {fex}",
+        "show interface fex-fabric"
+      ]
+    },
+    {
+      "id": "multicast-status",
+      "title": "Multicast routing status",
+      "category": "multicast",
+      "summary": "Inspect PIM neighbors, multicast routes, and IGMP groups.",
+      "keywords": ["multicast", "pim", "igmp", "mroute", "routing"],
+      "tags": ["multicast"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "steps": [
+        "show ip mroute",
+        "show ip pim neighbor",
+        "show ip igmp groups"
+      ]
+    },
+    {
+      "id": "nat-status",
+      "title": "NAT translations and statistics",
+      "category": "nat",
+      "summary": "Inspect NX-OS NAT translations and counters.",
+      "keywords": ["nat", "translation", "pat", "statistics"],
+      "tags": ["nat"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["network-admin"],
+      "steps": [
+        "show ip nat translations",
+        "show ip nat statistics",
+        "show running-config | include nat"
+      ]
+    }
+  ]
+}

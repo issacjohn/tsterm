@@ -1,0 +1,166 @@
+{
+  "id": "cisco-meraki",
+  "name": "Cisco Meraki",
+  "vendor": "Cisco",
+  "family": "Cloud",
+  "description": "Cisco Meraki MX, MS, and MR. Dashboard-first troubleshooting with optional Meraki Dashboard API calls.",
+  "aliases": ["meraki", "mx", "ms", "mr", "meraki dashboard", "cloud managed"],
+  "notes": [
+    "Meraki devices do not expose a full local troubleshooting CLI. Use Dashboard or the API.",
+    "API calls use the MERAKI_API_KEY environment variable so the key is never stored in a runbook.",
+    "Find the device serial in Dashboard > Devices."
+  ],
+  "categories": [
+    { "id": "dashboard", "name": "Dashboard", "description": "Guided checks in the Meraki Dashboard." },
+    { "id": "api", "name": "Dashboard API", "description": "Read-only API calls with curl." },
+    { "id": "vpn", "name": "VPN", "description": "Site-to-site and client VPN." },
+    { "id": "wireless", "name": "Wireless", "description": "MR client and RF troubleshooting." },
+    { "id": "switching", "name": "Switching", "description": "MS ports, PoE, and VLANs." }
+  ],
+  "workflows": [
+    {
+      "id": "device-uplink",
+      "title": "Device uplink and latency",
+      "category": "api",
+      "summary": "Read WAN uplink state and recent loss/latency history for an MX.",
+      "keywords": ["meraki", "mx", "uplink", "wan", "latency", "loss", "api"],
+      "tags": ["api", "uplink"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["MERAKI_API_KEY environment variable", "Dashboard API access"],
+      "variables": [
+        { "name": "serial", "prompt": "Meraki device serial", "type": "string", "required": true, "placeholder": "Q2XX-XXXX-XXXX" },
+        { "name": "dst", "prompt": "Latency test target", "type": "hostname", "default": "8.8.8.8" }
+      ],
+      "steps": [
+        "curl -s -H \"X-Cisco-Meraki-API-Key: $MERAKI_API_KEY\" \"https://api.meraki.com/api/v1/devices/{serial}/uplink\"",
+        "curl -s -H \"X-Cisco-Meraki-API-Key: $MERAKI_API_KEY\" \"https://api.meraki.com/api/v1/devices/{serial}/lossAndLatencyHistory?ip={dst}&timespan=3600\"",
+        { "instruction": "In Dashboard, compare the live uplink status under Security & SD-WAN > Monitor > Appliance status." }
+      ],
+      "notes": ["An empty array usually means the device has not reported that telemetry yet."]
+    },
+    {
+      "id": "client-list",
+      "title": "Clients recently seen",
+      "category": "api",
+      "summary": "List clients and their recent usage for a network.",
+      "keywords": ["meraki", "clients", "api", "network", "usage"],
+      "tags": ["api", "clients"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["MERAKI_API_KEY environment variable", "network ID"],
+      "variables": [
+        { "name": "network_id", "prompt": "Meraki network ID", "type": "string", "required": true }
+      ],
+      "steps": [
+        "curl -s -H \"X-Cisco-Meraki-API-Key: $MERAKI_API_KEY\" \"https://api.meraki.com/api/v1/networks/{network_id}/clients?timespan=3600\"",
+        { "instruction": "In Dashboard, open Network-wide > Clients and filter by the client MAC or IP." }
+      ]
+    },
+    {
+      "id": "vpn-status",
+      "title": "Site-to-site VPN status",
+      "category": "vpn",
+      "summary": "Check VPN peers, tunnel status, and recent alerts in Dashboard.",
+      "keywords": ["meraki", "vpn", "site-to-site", "tunnel", "peer"],
+      "tags": ["vpn"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["Dashboard access"],
+      "steps": [
+        { "instruction": "Open Security & SD-WAN > Monitor > Site-to-site VPN." },
+        { "instruction": "Check the peer status, last change, and the tunnel latency for the affected subnet." },
+        { "instruction": "Compare the advertised local and remote subnets; an overlap silently prevents traffic from using the tunnel." },
+        { "instruction": "Open the MX's event log and filter for VPN or connectivity events during the failure window." }
+      ],
+      "notes": ["Meraki VPN status is primarily a Dashboard workflow; API coverage varies by organization."]
+    },
+    {
+      "id": "packet-capture",
+      "title": "Packet capture from Dashboard",
+      "category": "dashboard",
+      "summary": "Capture traffic on an MX from the Dashboard and download the pcap.",
+      "keywords": ["meraki", "packet capture", "pcap", "mx", "sniffer"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["Dashboard access"],
+      "steps": [
+        { "instruction": "Open Security & SD-WAN > Monitor > Appliance status > Tools > Packet capture." },
+        { "instruction": "Choose the interface, source, destination, protocol, and port. Keep the capture short." },
+        { "instruction": "Start the capture, reproduce the flow, stop it, and download the pcap." },
+        { "instruction": "Analyze the pcap against the MX flow and the upstream device counters." }
+      ],
+      "notes": ["Captures are short-lived in Dashboard. Do not leave them running."]
+    },
+    {
+      "id": "switch-port",
+      "title": "Switch port troubleshooting",
+      "category": "switching",
+      "summary": "Inspect MS port status, PoE, VLAN, and errors.",
+      "keywords": ["meraki", "ms", "switch", "port", "poe", "vlan", "api"],
+      "tags": ["switching"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["MERAKI_API_KEY environment variable", "Dashboard access"],
+      "variables": [
+        { "name": "serial", "prompt": "Switch serial", "type": "string", "required": true }
+      ],
+      "steps": [
+        "curl -s -H \"X-Cisco-Meraki-API-Key: $MERAKI_API_KEY\" \"https://api.meraki.com/api/v1/devices/{serial}/switch/ports/statuses\"",
+        { "instruction": "In Dashboard, open Switch > Monitor > Switches and select the port. Check status, PoE, VLAN, and errors." },
+        { "instruction": "Compare the port configuration with the upstream device and the endpoint's negotiated speed." }
+      ]
+    },
+    {
+      "id": "wireless-client",
+      "title": "Wireless client troubleshooting",
+      "category": "wireless",
+      "summary": "Find an MR client and inspect its AP, signal, and connection history.",
+      "keywords": ["meraki", "mr", "wireless", "client", "rssi", "roam", "api"],
+      "tags": ["wireless"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["MERAKI_API_KEY environment variable", "Dashboard access"],
+      "variables": [
+        { "name": "network_id", "prompt": "Meraki network ID", "type": "string", "required": true }
+      ],
+      "steps": [
+        "curl -s -H \"X-Cisco-Meraki-API-Key: $MERAKI_API_KEY\" \"https://api.meraki.com/api/v1/networks/{network_id}/clients?timespan=3600\"",
+        { "instruction": "In Dashboard, open Wireless > Clients, select the client, and check RSSI, SNR, retries, and the AP it is using." },
+        { "instruction": "Open the AP's RF profile and compare channel utilization with neighboring APs." }
+      ]
+    },
+    {
+      "id": "org-alerts",
+      "title": "Organization alerts and events",
+      "category": "dashboard",
+      "summary": "Review recent organization alerts and security events during the failure window.",
+      "keywords": ["meraki", "alerts", "events", "organization", "dashboard"],
+      "tags": ["alerts"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["Dashboard access"],
+      "steps": [
+        { "instruction": "Open Organization > Alerts and filter by the affected network and time window." },
+        { "instruction": "Open Network-wide > Event log and filter for the device, client, or VPN event type." },
+        { "instruction": "For security events, open Security & SD-WAN > Monitor > Security center." }
+      ]
+    },
+    {
+      "id": "api-auth",
+      "title": "Validate Dashboard API access",
+      "category": "api",
+      "summary": "Confirm the API key and list organizations.",
+      "keywords": ["meraki", "api", "key", "organizations", "curl"],
+      "tags": ["api"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["MERAKI_API_KEY environment variable"],
+      "steps": [
+        "curl -s -H \"X-Cisco-Meraki-API-Key: $MERAKI_API_KEY\" \"https://api.meraki.com/api/v1/organizations\""
+      ],
+      "notes": ["A 401 means the key is invalid or expired. Never paste an API key into a ticket."]
+    }
+  ]
+}

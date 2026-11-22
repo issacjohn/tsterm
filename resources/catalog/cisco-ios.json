@@ -1,0 +1,473 @@
+{
+  "id": "cisco-ios",
+  "name": "Cisco IOS / IOS-XE",
+  "vendor": "Cisco",
+  "family": "Router",
+  "description": "Cisco IOS and IOS-XE routers and switches. Packet capture, routing protocols, AAA, IPsec, switching, NAT, multicast, and health.",
+  "aliases": ["ios", "iosxe", "ios-xe", "cisco router", "cisco switch", "catalyst", "isr", "asr"],
+  "notes": [
+    "Most commands require enable mode (privilege 15).",
+    "Run 'terminal length 0' to disable paging.",
+    "Use 'terminal monitor' to see debug output in an SSH session."
+  ],
+  "categories": [
+    { "id": "capture", "name": "Packet capture", "description": "Embedded Packet Capture (EPC) with an ACL and buffer." },
+    { "id": "connectivity", "name": "Connectivity", "description": "Ping, traceroute, route lookup, ARP, and CEF." },
+    { "id": "routing", "name": "Routing", "description": "BGP, OSPF, EIGRP, and route selection." },
+    { "id": "switching", "name": "Switching", "description": "Spanning tree, MAC table, and interface status." },
+    { "id": "aaa", "name": "AAA / RADIUS", "description": "RADIUS, TACACS+, and AAA server state." },
+    { "id": "vpn", "name": "VPN / IPsec", "description": "IKE, IPsec, DMVPN, and crypto session checks." },
+    { "id": "nat", "name": "NAT", "description": "Translations, statistics, and NAT debug." },
+    { "id": "system", "name": "System health", "description": "CPU, memory, environment, NTP, and logs." },
+    { "id": "dhcp", "name": "DHCP", "description": "Bindings and DHCP server debugging." },
+    { "id": "multicast", "name": "Multicast", "description": "PIM neighbors, mroutes, and IGMP groups." }
+  ],
+  "workflows": [
+    {
+      "id": "epc-host",
+      "title": "Embedded capture — host to host",
+      "category": "capture",
+      "summary": "Build a temporary ACL, start an EPC capture, then stop it and display the buffer.",
+      "keywords": ["packet capture", "epc", "monitor capture", "pcap", "acl", "host"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["enable mode", "config mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Capture interface", "type": "interface", "default": "GigabitEthernet0/0" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "configure terminal",
+        "ip access-list extended TSTCAP",
+        "permit ip host {src} host {dst}",
+        "exit",
+        "monitor capture TSTCAP interface {iface} both access-list TSTCAP",
+        "monitor capture TSTCAP buffer size 10",
+        "monitor capture TSTCAP start",
+        { "instruction": "Generate the traffic, then stop and inspect the capture." },
+        "monitor capture TSTCAP stop",
+        "show monitor capture TSTCAP buffer detailed"
+      ],
+      "cleanup": [
+        "no monitor capture TSTCAP",
+        "configure terminal",
+        "no ip access-list extended TSTCAP",
+        "end"
+      ],
+      "notes": ["The buffer size is in megabytes.", "Use a physical interface, not a VLAN for EPC on most platforms."]
+    },
+    {
+      "id": "epc-port",
+      "title": "Embedded capture — application port",
+      "category": "capture",
+      "summary": "Capture a TCP or UDP flow between two hosts and a specific destination port.",
+      "keywords": ["packet capture", "epc", "port", "tcp", "udp", "pcap"],
+      "tags": ["capture", "application"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["enable mode", "config mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Capture interface", "type": "interface", "default": "GigabitEthernet0/0" },
+        { "name": "proto", "prompt": "Protocol", "type": "choice", "default": "tcp", "choices": ["tcp", "udp"] },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "port", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "configure terminal",
+        "ip access-list extended TSTCAP",
+        "permit {proto} host {src} host {dst} eq {port}",
+        "exit",
+        "monitor capture TSTCAP interface {iface} both access-list TSTCAP",
+        "monitor capture TSTCAP buffer size 10",
+        "monitor capture TSTCAP start",
+        { "instruction": "Reproduce the application flow, then stop and display." },
+        "monitor capture TSTCAP stop",
+        "show monitor capture TSTCAP buffer detailed"
+      ],
+      "cleanup": [
+        "no monitor capture TSTCAP",
+        "configure terminal",
+        "no ip access-list extended TSTCAP",
+        "end"
+      ]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity check",
+      "category": "connectivity",
+      "summary": "Ping, trace, route, ARP, and interface status for one target.",
+      "keywords": ["ping", "traceroute", "route", "arp", "connectivity"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "dst", "prompt": "Target IP or hostname", "type": "hostname", "required": true, "placeholder": "8.8.8.8" }
+      ],
+      "steps": [
+        "ping {dst} repeat 10",
+        "traceroute {dst}",
+        "show ip route {dst}",
+        "show ip arp {dst}",
+        "show ip interface brief"
+      ]
+    },
+    {
+      "id": "route-lookup",
+      "title": "Route and CEF lookup",
+      "category": "connectivity",
+      "summary": "See the selected route, the CEF adjacency, and the outgoing interface.",
+      "keywords": ["route", "cef", "next hop", "adjacency", "lookup"],
+      "tags": ["routing"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "show ip route {dst}",
+        "show ip cef {dst}",
+        "show ip arp {dst}",
+        "show ip interface brief"
+      ]
+    },
+    {
+      "id": "bgp-status",
+      "title": "BGP neighbor health",
+      "category": "routing",
+      "summary": "Inspect BGP summary, a specific neighbor, advertised routes, and the BGP RIB.",
+      "keywords": ["bgp", "neighbor", "peer", "routing", "advertised", "summary"],
+      "tags": ["bgp"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "neighbor", "prompt": "BGP neighbor IP", "type": "ip", "default": "203.0.113.1" }
+      ],
+      "steps": [
+        "show ip bgp summary",
+        "show ip bgp neighbors {neighbor}",
+        "show ip bgp neighbors {neighbor} advertised-routes",
+        "show ip route bgp"
+      ],
+      "notes": ["Received routes require soft-reconfiguration or route refresh."]
+    },
+    {
+      "id": "bgp-debug",
+      "title": "BGP debugs — one neighbor",
+      "category": "routing",
+      "summary": "Watch BGP update processing for a single neighbor without debugging the whole table.",
+      "keywords": ["bgp", "debug", "neighbor", "updates", "routing"],
+      "tags": ["bgp", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["enable mode", "maintenance window"],
+      "variables": [
+        { "name": "neighbor", "prompt": "BGP neighbor IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "terminal monitor",
+        "debug ip bgp {neighbor} updates",
+        { "instruction": "Reset or refresh the neighbor, then read the output." },
+        "show ip bgp neighbors {neighbor}",
+        "show logging | include BGP"
+      ],
+      "cleanup": [
+        "no debug ip bgp {neighbor} updates",
+        "terminal no monitor"
+      ],
+      "notes": ["BGP debugs can be CPU intensive on a full table. Use a maintenance window."]
+    },
+    {
+      "id": "ospf-status",
+      "title": "OSPF neighbor and database health",
+      "category": "routing",
+      "summary": "Inspect neighbors, interfaces, the LSDB, and the OSPF RIB.",
+      "keywords": ["ospf", "neighbor", "lsa", "database", "routing"],
+      "tags": ["ospf"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show ip ospf neighbor",
+        "show ip ospf interface brief",
+        "show ip ospf database",
+        "show ip route ospf",
+        "show ip protocols"
+      ]
+    },
+    {
+      "id": "ospf-debug",
+      "title": "OSPF debugs — adjacency and hellos",
+      "category": "routing",
+      "summary": "Watch OSPF adjacency and hello processing while reproducing a neighbor flap.",
+      "keywords": ["ospf", "debug", "adjacency", "hello", "neighbor"],
+      "tags": ["ospf", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["enable mode", "maintenance window"],
+      "steps": [
+        "terminal monitor",
+        "debug ip ospf adj",
+        "debug ip ospf hello",
+        { "instruction": "Reproduce the adjacency problem, then inspect the debug output." },
+        "show ip ospf neighbor",
+        "show logging | include OSPF"
+      ],
+      "cleanup": [
+        "no debug ip ospf adj",
+        "no debug ip ospf hello",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "eigrp-status",
+      "title": "EIGRP neighbor and topology health",
+      "category": "routing",
+      "summary": "Check EIGRP neighbors, topology entries, and learned routes.",
+      "keywords": ["eigrp", "neighbor", "topology", "routing"],
+      "tags": ["eigrp"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show ip eigrp neighbors",
+        "show ip eigrp topology",
+        "show ip route eigrp",
+        "show ip protocols"
+      ]
+    },
+    {
+      "id": "radius-debug",
+      "title": "RADIUS debugs — all users",
+      "category": "aaa",
+      "summary": "Enable RADIUS debugging, reproduce an authentication attempt, and read the log.",
+      "keywords": ["radius", "aaa", "debug", "authentication", "login"],
+      "tags": ["radius", "debug"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode", "terminal monitor"],
+      "steps": [
+        "terminal monitor",
+        "debug radius",
+        { "instruction": "Trigger the authentication, then inspect the output and logs." },
+        "show logging | include RADIUS",
+        "show aaa servers"
+      ],
+      "cleanup": [
+        "no debug radius",
+        "terminal no monitor"
+      ],
+      "notes": ["IOS does not filter this debug per user. Filter the log lines by username after collecting."]
+    },
+    {
+      "id": "aaa-status",
+      "title": "AAA server status",
+      "category": "aaa",
+      "summary": "Inspect AAA servers, RADIUS statistics, TACACS+ state, and the relevant configuration.",
+      "keywords": ["aaa", "radius", "tacacs", "server", "statistics"],
+      "tags": ["aaa"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show aaa servers",
+        "show radius statistics",
+        "show tacacs",
+        "show running-config | include aaa|radius|tacacs"
+      ]
+    },
+    {
+      "id": "tacacs-debug",
+      "title": "TACACS+ debugs",
+      "category": "aaa",
+      "summary": "Watch TACACS+ authentication and authorization exchanges.",
+      "keywords": ["tacacs", "aaa", "debug", "authentication", "authorization"],
+      "tags": ["tacacs", "debug"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode"],
+      "steps": [
+        "terminal monitor",
+        "debug tacacs",
+        { "instruction": "Attempt a login or command authorization, then read the output." },
+        "show logging | include TACACS",
+        "show tacacs"
+      ],
+      "cleanup": [
+        "no debug tacacs",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "ipsec-debug",
+      "title": "IPsec and IKE debugs",
+      "category": "vpn",
+      "summary": "Inspect IKE and IPsec SAs, then enable crypto debugs for a tunnel failure.",
+      "keywords": ["ipsec", "ike", "vpn", "debug", "crypto", "peer", "tunnel"],
+      "tags": ["vpn", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["enable mode", "maintenance window"],
+      "variables": [
+        { "name": "peer", "prompt": "Peer IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "terminal monitor",
+        "show crypto isakmp sa",
+        "show crypto ipsec sa peer {peer}",
+        "debug crypto isakmp",
+        "debug crypto ipsec",
+        { "instruction": "Bring the tunnel up or send traffic, then inspect the output." },
+        "show crypto session detail",
+        "show logging | include IPSEC|IKE"
+      ],
+      "cleanup": [
+        "no debug crypto isakmp",
+        "no debug crypto ipsec",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "dmvpn-status",
+      "title": "DMVPN tunnel and NHRP",
+      "category": "vpn",
+      "summary": "Inspect DMVPN peers, NHRP mappings, and crypto sessions.",
+      "keywords": ["dmvpn", "nhrp", "vpn", "tunnel", "spoke", "hub"],
+      "tags": ["vpn", "dmvpn"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show dmvpn",
+        "show dmvpn detail",
+        "show crypto session detail",
+        "show ip nhrp"
+      ]
+    },
+    {
+      "id": "nat-lookup",
+      "title": "NAT translation lookup",
+      "category": "nat",
+      "summary": "Find NAT translations and statistics for a source address.",
+      "keywords": ["nat", "translation", "overload", "pat", "source"],
+      "tags": ["nat"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "src", "prompt": "Inside source IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "show ip nat translations | include {src}",
+        "show ip nat statistics",
+        "show running-config | include ip nat"
+      ]
+    },
+    {
+      "id": "interface-triage",
+      "title": "Interface triage",
+      "category": "switching",
+      "summary": "Check an interface's state, errors, counters, and configuration.",
+      "keywords": ["interface", "errors", "counters", "link", "switchport"],
+      "tags": ["interface"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "GigabitEthernet0/1" }
+      ],
+      "steps": [
+        "show interfaces {iface}",
+        "show interfaces {iface} counters errors",
+        "show running-config interface {iface}",
+        "show ip interface {iface}",
+        "show interfaces status"
+      ]
+    },
+    {
+      "id": "spanning-tree",
+      "title": "Spanning tree and MAC table",
+      "category": "switching",
+      "summary": "Inspect STP state for a VLAN, the MAC table, and port status.",
+      "keywords": ["spanning-tree", "stp", "vlan", "mac", "loop", "broadcast storm"],
+      "tags": ["switching"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "vlan", "prompt": "VLAN ID", "type": "int", "default": "1", "min": 1, "max": 4094 }
+      ],
+      "steps": [
+        "show spanning-tree summary",
+        "show spanning-tree vlan {vlan}",
+        "show mac address-table",
+        "show interfaces status"
+      ]
+    },
+    {
+      "id": "system-health",
+      "title": "System health snapshot",
+      "category": "system",
+      "summary": "CPU, memory, environment, NTP, clock, and recent logs.",
+      "keywords": ["health", "cpu", "memory", "environment", "ntp", "logs"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show version",
+        "show processes cpu sorted | exclude 0.00",
+        "show memory statistics",
+        "show environment all",
+        "show ntp status",
+        "show clock",
+        "show logging"
+      ]
+    },
+    {
+      "id": "dhcp-debug",
+      "title": "DHCP server and bindings",
+      "category": "dhcp",
+      "summary": "Check DHCP bindings and statistics, then enable server event debugging.",
+      "keywords": ["dhcp", "binding", "lease", "debug", "server"],
+      "tags": ["dhcp", "debug"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode", "DHCP server configured"],
+      "steps": [
+        "show ip dhcp binding",
+        "show ip dhcp server statistics",
+        "terminal monitor",
+        "debug ip dhcp server events",
+        { "instruction": "Renew a client lease, then read the output." },
+        "show logging | include DHCP"
+      ],
+      "cleanup": [
+        "no debug ip dhcp server events",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "multicast-status",
+      "title": "Multicast routing status",
+      "category": "multicast",
+      "summary": "Inspect PIM neighbors, multicast routes, and IGMP group membership.",
+      "keywords": ["multicast", "pim", "igmp", "mroute", "routing"],
+      "tags": ["multicast"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show ip mroute",
+        "show ip pim neighbor",
+        "show ip igmp groups",
+        "show ip mroute count"
+      ]
+    }
+  ]
+}

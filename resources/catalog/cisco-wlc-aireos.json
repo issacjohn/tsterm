@@ -1,0 +1,238 @@
+{
+  "id": "cisco-wlc-aireos",
+  "name": "Cisco Wireless (AireOS)",
+  "vendor": "Cisco",
+  "family": "Wireless",
+  "description": "Cisco AireOS wireless LAN controllers (5508, 5520, 8540, 9800 in AireOS-compatible modes). Client, AP, CAPWAP, RADIUS, roaming, and RF troubleshooting.",
+  "aliases": ["wlc", "aireos", "wireless lan controller", "cisco wlc", "5508", "5520", "8540"],
+  "notes": [
+    "AireOS debug output is often sent to the console. Use an SSH/console session you can watch.",
+    "'debug disable-all' stops every debug on the controller and is the safety cleanup for these runbooks.",
+    "Client MAC addresses may be entered as 0011.2233.4455 or 00:11:22:33:44:55."
+  ],
+  "categories": [
+    { "id": "client", "name": "Client troubleshooting", "description": "Client state, authentication, and connectivity." },
+    { "id": "aaa", "name": "AAA / RADIUS", "description": "RADIUS servers, statistics, and authentication debug." },
+    { "id": "ap", "name": "Access points", "description": "AP inventory, join state, and configuration." },
+    { "id": "capwap", "name": "CAPWAP", "description": "AP-to-controller control and data path." },
+    { "id": "rf", "name": "RF and roaming", "description": "Radio state, roaming, and mobility." },
+    { "id": "system", "name": "System health", "description": "Controller CPU, memory, interfaces, and logs." }
+  ],
+  "workflows": [
+    {
+      "id": "client-detail",
+      "title": "Client detail and state",
+      "category": "client",
+      "summary": "Inspect a client's authentication, IP, AP, RSSI, and policy state.",
+      "keywords": ["client", "wireless", "mac", "rssi", "authentication", "wlc"],
+      "tags": ["client"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI", "monitor access"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true, "placeholder": "0011.2233.4455" }
+      ],
+      "steps": [
+        "show client summary",
+        "show client detail {mac}",
+        "show client summary | include {mac}"
+      ]
+    },
+    {
+      "id": "client-debug",
+      "title": "Client debug — one MAC",
+      "category": "client",
+      "summary": "Enable client-specific debugging, reproduce the join or roaming issue, then disable all debugs.",
+      "keywords": ["client", "debug", "wireless", "mac", "join", "roam", "wlc"],
+      "tags": ["client", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["controller CLI", "maintenance window", "console or SSH session"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        { "instruction": "Start a console or SSH session you can watch. AireOS debug output may not appear in every session." },
+        "debug client {mac}",
+        { "instruction": "Reconnect or roam the client, then inspect its detail and the message log." },
+        "show client detail {mac}",
+        "show msglog"
+      ],
+      "cleanup": ["debug disable-all"],
+      "notes": ["The cleanup disables all wireless debugs, not just this client."]
+    },
+    {
+      "id": "radius-debug",
+      "title": "RADIUS / dot1x debugs",
+      "category": "aaa",
+      "summary": "Enable AAA, RADIUS, and dot1x debugging for an authentication failure.",
+      "keywords": ["radius", "aaa", "dot1x", "debug", "authentication", "wireless"],
+      "tags": ["radius", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["controller CLI", "maintenance window"],
+      "steps": [
+        "debug aaa events enable",
+        "debug aaa packet enable",
+        "debug dot1x events enable",
+        { "instruction": "Have the client authenticate now, then inspect the log and client detail." },
+        "show radius statistics",
+        "show client summary"
+      ],
+      "cleanup": ["debug disable-all"],
+      "notes": ["These are global AAA debugs. Use a short window to avoid overwhelming the controller."]
+    },
+    {
+      "id": "radius-status",
+      "title": "RADIUS server status",
+      "category": "aaa",
+      "summary": "Check RADIUS server configuration, ports, and authentication statistics.",
+      "keywords": ["radius", "aaa", "server", "statistics", "port", "wireless"],
+      "tags": ["radius"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "steps": [
+        "show radius summary",
+        "show radius auth-port",
+        "show radius statistics",
+        "show aaa auth"
+      ]
+    },
+    {
+      "id": "ap-join",
+      "title": "AP inventory and join state",
+      "category": "ap",
+      "summary": "Inspect AP inventory, configuration, and join statistics.",
+      "keywords": ["ap", "access point", "join", "inventory", "capwap", "wlc"],
+      "tags": ["ap"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "variables": [
+        { "name": "ap", "prompt": "AP name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show ap summary",
+        "show ap config general {ap}",
+        "show ap join stats summary all",
+        "show ap summary | include {ap}"
+      ]
+    },
+    {
+      "id": "capwap-debug",
+      "title": "CAPWAP debugs — AP join failures",
+      "category": "capwap",
+      "summary": "Enable CAPWAP control and packet debugs while an AP attempts to join.",
+      "keywords": ["capwap", "ap", "join", "debug", "wireless", "wlc"],
+      "tags": ["capwap", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["controller CLI", "maintenance window"],
+      "steps": [
+        "debug capwap events enable",
+        "debug capwap packet enable",
+        { "instruction": "Reboot or reconnect the AP, then watch the join attempt." },
+        "show ap join stats summary all",
+        "show msglog"
+      ],
+      "cleanup": ["debug disable-all"],
+      "notes": ["If the AP never appears, check DHCP option 43, DNS, and UDP 5246/5247 reachability first."]
+    },
+    {
+      "id": "roaming",
+      "title": "Roaming and mobility",
+      "category": "rf",
+      "summary": "Check mobility state, the client's current AP, and roaming history.",
+      "keywords": ["roaming", "mobility", "client", "ap", "wireless"],
+      "tags": ["roaming"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        "show mobility summary",
+        "show client detail {mac}",
+        "show ap summary"
+      ]
+    },
+    {
+      "id": "rf-health",
+      "title": "RF health for an AP",
+      "category": "rf",
+      "summary": "Inspect the AP's radio configuration and automatic RF statistics.",
+      "keywords": ["rf", "radio", "channel", "power", "interference", "ap", "wireless"],
+      "tags": ["rf"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "variables": [
+        { "name": "ap", "prompt": "AP name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show ap auto-rf 802.11a {ap}",
+        "show ap auto-rf 802.11b {ap}",
+        "show ap config general {ap}",
+        "show ap summary"
+      ]
+    },
+    {
+      "id": "interface-health",
+      "title": "Controller interface and system health",
+      "category": "system",
+      "summary": "Check controller interfaces, CPU, memory, and version.",
+      "keywords": ["health", "interface", "cpu", "memory", "wlc", "system"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "steps": [
+        "show sysinfo",
+        "show interface summary",
+        "show cpu",
+        "show memory",
+        "show msglog"
+      ]
+    },
+    {
+      "id": "dhcp-client",
+      "title": "DHCP for wireless clients",
+      "category": "client",
+      "summary": "Inspect DHCP proxy state and the client's address assignment.",
+      "keywords": ["dhcp", "client", "address", "proxy", "wireless"],
+      "tags": ["dhcp"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        "show dhcp proxy",
+        "show client detail {mac}",
+        "show interface summary"
+      ]
+    },
+    {
+      "id": "wlan-check",
+      "title": "WLAN configuration and clients",
+      "category": "client",
+      "summary": "Verify the WLAN, its interface, security policy, and connected clients.",
+      "keywords": ["wlan", "ssid", "client", "security", "policy", "wireless"],
+      "tags": ["wlan"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["controller CLI"],
+      "variables": [
+        { "name": "wlan", "prompt": "WLAN profile name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show wlan summary",
+        "show wlan {wlan}",
+        "show client summary"
+      ]
+    }
+  ]
+}

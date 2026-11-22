@@ -1,0 +1,499 @@
+{
+  "id": "cisco-asa",
+  "name": "Cisco ASA",
+  "vendor": "Cisco",
+  "family": "Firewall",
+  "description": "Cisco Adaptive Security Appliance. VPN, packet capture, AAA/RADIUS, NAT, routing, failover, and ASP diagnostics.",
+  "aliases": ["asa", "adaptive security appliance", "ciscoasa", "firepower asa"],
+  "notes": [
+    "Most commands require enable mode.",
+    "Use 'terminal pager 0' if output stops at a pager prompt.",
+    "Run 'terminal monitor' in an SSH session to see debug output there.",
+    "Debug output can be CPU intensive. Every debug runbook includes cleanup commands."
+  ],
+  "categories": [
+    { "id": "capture", "name": "Packet capture", "description": "Capture traffic on an interface, host pair, subnet, ACL, or tunnel." },
+    { "id": "connectivity", "name": "Connectivity", "description": "Ping, traceroute, route lookup, ARP, and packet-tracer." },
+    { "id": "vpn", "name": "VPN / IPsec", "description": "AnyConnect, IKEv2, IPsec, and tunnel diagnosis." },
+    { "id": "aaa", "name": "AAA / RADIUS", "description": "RADIUS, TACACS+, AAA server tests, and authentication debugs." },
+    { "id": "nat", "name": "NAT & policy", "description": "NAT translations, connections, and policy path checks." },
+    { "id": "routing", "name": "Routing", "description": "OSPF, BGP, routes, and next-hop reachability." },
+    { "id": "system", "name": "System & HA", "description": "CPU, memory, failover, ASP drops, and logs." },
+    { "id": "dhcp", "name": "DHCP", "description": "DHCP bindings, statistics, and packet debugging." }
+  ],
+  "workflows": [
+    {
+      "id": "capture-host",
+      "title": "Packet capture — host to host",
+      "category": "capture",
+      "summary": "Create a 32 MB circular capture on an interface, generate traffic, then display the packets.",
+      "keywords": ["packet capture", "pcap", "sniffer", "host", "tcpdump", "capture"],
+      "tags": ["capture", "packet"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["enable mode", "interface nameif"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface nameif", "type": "interface", "default": "inside", "placeholder": "inside" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true, "placeholder": "10.1.1.10" },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true, "placeholder": "10.2.2.20" }
+      ],
+      "steps": [
+        { "command": "capture TSTCAP interface {iface} buffer bytes 33554432 match ip host {src} host {dst}", "note": "Creates a 32 MB circular buffer named TSTCAP." },
+        { "instruction": "Generate the traffic, then run the display command." },
+        { "command": "show capture TSTCAP" },
+        { "command": "show capture TSTCAP packet-number 1 trace", "note": "Shows the path and NAT decisions for packet 1." }
+      ],
+      "cleanup": [
+        { "command": "no capture TSTCAP", "note": "Stops the capture and frees the buffer." }
+      ],
+      "notes": [
+        "Use a larger buffer if the traffic burst is high.",
+        "The capture name is fixed (TSTCAP) so cleanup is predictable."
+      ],
+      "references": [
+        { "title": "Cisco ASA packet capture", "url": "https://www.cisco.com/c/en/us/support/docs/security/asa-5500-x-series-next-generation-firewalls/118976-technote-pcap-00.html" }
+      ]
+    },
+    {
+      "id": "capture-port",
+      "title": "Packet capture — TCP or UDP port",
+      "category": "capture",
+      "summary": "Capture a single application flow between two hosts and one port.",
+      "keywords": ["packet capture", "port", "tcp", "udp", "pcap", "capture"],
+      "tags": ["capture", "application"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface nameif", "type": "interface", "default": "inside" },
+        { "name": "proto", "prompt": "Protocol", "type": "choice", "default": "tcp", "choices": ["tcp", "udp"] },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "port", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        { "command": "capture TSTCAP interface {iface} buffer bytes 33554432 match {proto} host {src} host {dst} eq {port}" },
+        { "instruction": "Reproduce the application problem now." },
+        { "command": "show capture TSTCAP" }
+      ],
+      "cleanup": ["no capture TSTCAP"],
+      "notes": ["For a range of ports, use an ACL capture instead."]
+    },
+    {
+      "id": "capture-subnet",
+      "title": "Packet capture — subnet to subnet",
+      "category": "capture",
+      "summary": "Capture all traffic between two subnets using ASA wildcard masks.",
+      "keywords": ["packet capture", "subnet", "network", "mask", "pcap"],
+      "tags": ["capture", "subnet"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface nameif", "type": "interface", "default": "inside" },
+        { "name": "srcnet", "prompt": "Source subnet", "type": "ipv4", "default": "10.1.1.0" },
+        { "name": "srcmask", "prompt": "Source mask", "type": "ipv4", "default": "255.255.255.0" },
+        { "name": "dstnet", "prompt": "Destination subnet", "type": "ipv4", "default": "10.2.2.0" },
+        { "name": "dstmask", "prompt": "Destination mask", "type": "ipv4", "default": "255.255.255.0" }
+      ],
+      "steps": [
+        { "command": "capture TSTCAP interface {iface} buffer bytes 33554432 match ip {srcnet} {srcmask} {dstnet} {dstmask}" },
+        { "instruction": "Generate traffic, then display the buffer." },
+        { "command": "show capture TSTCAP" }
+      ],
+      "cleanup": ["no capture TSTCAP"],
+      "notes": ["This can fill quickly on busy segments. Narrow to a host pair when possible."]
+    },
+    {
+      "id": "capture-acl",
+      "title": "Packet capture — with a temporary ACL",
+      "category": "capture",
+      "summary": "Build a temporary ACL for a protocol and host pair, attach it to a capture, then remove both.",
+      "keywords": ["packet capture", "acl", "access-list", "protocol", "icmp", "pcap"],
+      "tags": ["capture", "acl"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["enable mode", "config mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface nameif", "type": "interface", "default": "inside" },
+        { "name": "proto", "prompt": "IP protocol", "type": "choice", "default": "ip", "choices": ["ip", "tcp", "udp", "icmp", "esp"] },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "configure terminal",
+        "access-list TSTCAP_ACL extended permit {proto} host {src} host {dst}",
+        "exit",
+        "capture TSTCAP interface {iface} buffer bytes 33554432 match access-list TSTCAP_ACL",
+        { "instruction": "Generate traffic, then inspect the capture." },
+        "show capture TSTCAP"
+      ],
+      "cleanup": [
+        "no capture TSTCAP",
+        "configure terminal",
+        "no access-list TSTCAP_ACL",
+        "exit"
+      ],
+      "notes": ["Useful for ESP (protocol 50) when a simple host match is not enough."]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity check",
+      "category": "connectivity",
+      "summary": "Ping, trace, route lookup, and ARP lookup for a target.",
+      "keywords": ["ping", "traceroute", "route", "arp", "connectivity"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "dst", "prompt": "Target IP or hostname", "type": "hostname", "required": true, "placeholder": "8.8.8.8" }
+      ],
+      "steps": [
+        "ping {dst}",
+        "traceroute {dst}",
+        "show route {dst}",
+        "show arp | include {dst}",
+        "show interface ip brief"
+      ]
+    },
+    {
+      "id": "packet-tracer-tcp",
+      "title": "Packet-tracer — TCP flow",
+      "category": "connectivity",
+      "summary": "Simulate a TCP flow through ACLs, NAT, routing, and inspection without sending traffic.",
+      "keywords": ["packet-tracer", "tcp", "acl", "nat", "simulate", "policy"],
+      "tags": ["packet-tracer", "policy"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Ingress interface", "type": "interface", "default": "inside" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "sport", "prompt": "Source port", "type": "port", "default": "12345" },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "dport", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "packet-tracer input {iface} tcp {src} {sport} {dst} {dport} detailed"
+      ],
+      "notes": ["Read the result from the bottom up: NAT, route, ACL, inspection, then the final action."]
+    },
+    {
+      "id": "packet-tracer-icmp",
+      "title": "Packet-tracer — ICMP echo",
+      "category": "connectivity",
+      "summary": "Check whether an ICMP echo request would be allowed and routed.",
+      "keywords": ["packet-tracer", "icmp", "ping", "acl"],
+      "tags": ["packet-tracer"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "iface", "prompt": "Ingress interface", "type": "interface", "default": "inside" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": ["packet-tracer input {iface} icmp {src} 8 0 {dst} detailed"]
+    },
+    {
+      "id": "vpn-sessions",
+      "title": "VPN session inventory",
+      "category": "vpn",
+      "summary": "Summarize AnyConnect and site-to-site sessions, then inspect details.",
+      "keywords": ["vpn", "anyconnect", "session", "l2l", "ipsec", "remote access"],
+      "tags": ["vpn"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show vpn-sessiondb summary",
+        "show vpn-sessiondb detail anyconnect",
+        "show vpn-sessiondb detail l2l"
+      ]
+    },
+    {
+      "id": "vpn-user",
+      "title": "VPN user lookup",
+      "category": "vpn",
+      "summary": "Find a user's AnyConnect session and related authentication log lines.",
+      "keywords": ["vpn", "user", "anyconnect", "session", "filter"],
+      "tags": ["vpn", "user"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "user", "prompt": "Username", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show vpn-sessiondb anyconnect | include {user}",
+        "show logging | include {user}",
+        "show aaa-server"
+      ]
+    },
+    {
+      "id": "ikev2-debug",
+      "title": "IKEv2 debugs — connection failures",
+      "category": "vpn",
+      "summary": "Enable IKEv2 protocol and platform debugs, reproduce the failure, then inspect logging.",
+      "keywords": ["vpn", "ikev2", "debug", "ipsec", "phase 1", "tunnel"],
+      "tags": ["vpn", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["enable mode", "a maintenance window"],
+      "variables": [],
+      "steps": [
+        { "command": "terminal monitor", "note": "Shows debug and log output in this SSH session." },
+        "debug crypto ikev2 protocol 255",
+        "debug crypto ikev2 platform 255",
+        { "instruction": "Attempt the VPN connection now, then inspect the log." },
+        "show logging | include IKEv2",
+        "show crypto ikev2 sa"
+      ],
+      "cleanup": [
+        "no debug crypto ikev2 protocol",
+        "no debug crypto ikev2 platform",
+        "terminal no monitor"
+      ],
+      "notes": [
+        "IKEv2 debug flags are global, not per-peer.",
+        "If you are connected over SSH, use 'show logging' or ASDM to read the output."
+      ]
+    },
+    {
+      "id": "ipsec-debug",
+      "title": "IPsec debugs — tunnel and SA issues",
+      "category": "vpn",
+      "summary": "Inspect IPsec security associations and enable IPsec debug output for a peer.",
+      "keywords": ["vpn", "ipsec", "debug", "sa", "peer", "tunnel"],
+      "tags": ["vpn", "debug"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "peer", "prompt": "Peer IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "show crypto ipsec sa peer {peer}",
+        "terminal monitor",
+        "debug crypto ipsec 255",
+        { "instruction": "Send traffic through the tunnel, then check the SAs and logs." },
+        "show crypto ipsec sa peer {peer}",
+        "show logging | include IPsec"
+      ],
+      "cleanup": [
+        "no debug crypto ipsec",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "anyconnect-debug",
+      "title": "AnyConnect debugs — connection and login",
+      "category": "vpn",
+      "summary": "Enable AnyConnect/WebVPN debugs and inspect session establishment.",
+      "keywords": ["anyconnect", "webvpn", "vpn", "debug", "login", "ssl"],
+      "tags": ["vpn", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["enable mode", "a maintenance window"],
+      "steps": [
+        "terminal monitor",
+        "debug webvpn anyconnect 255",
+        { "instruction": "Reconnect the AnyConnect client, then read the output." },
+        "show vpn-sessiondb anyconnect",
+        "show logging | include webvpn"
+      ],
+      "cleanup": [
+        "no debug webvpn anyconnect",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "radius-all",
+      "title": "RADIUS debugs — all users",
+      "category": "aaa",
+      "summary": "Enable RADIUS debugging for every authentication attempt and watch the output.",
+      "keywords": ["radius", "aaa", "debug", "authentication", "login", "vpn"],
+      "tags": ["radius", "debug"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode"],
+      "steps": [
+        "terminal monitor",
+        "debug radius all",
+        { "instruction": "Trigger the authentication attempt, then inspect the log." },
+        "show logging | include RADIUS",
+        "show aaa-server"
+      ],
+      "cleanup": [
+        "undebug radius all",
+        "terminal no monitor"
+      ],
+      "notes": ["This is global. Use the single-user runbook when many users are authenticating."]
+    },
+    {
+      "id": "radius-user",
+      "title": "RADIUS debugs — one user",
+      "category": "aaa",
+      "summary": "Filter RADIUS debugging to a single username and find that user's log lines.",
+      "keywords": ["radius", "aaa", "debug", "user", "filter", "authentication"],
+      "tags": ["radius", "debug", "user"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode", "ASA 9.x or later"],
+      "variables": [
+        { "name": "user", "prompt": "Username", "type": "string", "required": true, "placeholder": "jsmith" }
+      ],
+      "steps": [
+        "terminal monitor",
+        "debug radius user {user}",
+        { "instruction": "Have the user authenticate now, then inspect the log." },
+        "show logging | include {user}",
+        "show aaa-server"
+      ],
+      "cleanup": [
+        "undebug radius user {user}",
+        "terminal no monitor"
+      ],
+      "notes": ["If this ASA release rejects 'debug radius user', use the all-users runbook."]
+    },
+    {
+      "id": "radius-server-test",
+      "title": "Test RADIUS authentication",
+      "category": "aaa",
+      "summary": "Check server reachability, inspect the AAA group, and run a test authentication.",
+      "keywords": ["radius", "aaa", "test", "server", "authentication", "aaa-server"],
+      "tags": ["radius", "test"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "group", "prompt": "AAA server group tag", "type": "string", "default": "RADIUS" },
+        { "name": "user", "prompt": "Test username", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show aaa-server {group}",
+        { "command": "test aaa-server authentication {group} username {user}", "note": "The ASA prompts for the test password; it is not stored by TSTerm." },
+        "show logging | include RADIUS"
+      ],
+      "notes": ["Confirm the server group tag exactly with 'show aaa-server'."]
+    },
+    {
+      "id": "nat-troubleshoot",
+      "title": "NAT and connection lookup",
+      "category": "nat",
+      "summary": "Look up translations and connections for a source, then trace the flow.",
+      "keywords": ["nat", "xlate", "translation", "conn", "packet-tracer"],
+      "tags": ["nat"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "dport", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "show nat detail",
+        "show xlate | include {src}",
+        "show conn address {src}",
+        "packet-tracer input inside tcp {src} 12345 {dst} {dport} detailed"
+      ]
+    },
+    {
+      "id": "routing-status",
+      "title": "Routing protocol status",
+      "category": "routing",
+      "summary": "Inspect routes plus OSPF, EIGRP, and BGP neighbors in one pass.",
+      "keywords": ["routing", "ospf", "bgp", "eigrp", "route", "neighbor"],
+      "tags": ["routing"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "variables": [
+        { "name": "dst", "prompt": "Route lookup target", "type": "ip", "default": "8.8.8.8" }
+      ],
+      "steps": [
+        "show route {dst}",
+        "show ospf neighbor",
+        "show ospf interface brief",
+        "show eigrp neighbors",
+        "show bgp summary"
+      ],
+      "notes": ["Some commands are absent when that routing protocol is not enabled."]
+    },
+    {
+      "id": "failover-health",
+      "title": "Failover and HA health",
+      "category": "system",
+      "summary": "Check failover state, history, and monitored interfaces.",
+      "keywords": ["failover", "ha", "high availability", "state", "replication"],
+      "tags": ["ha"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show failover",
+        "show failover history",
+        "show monitor-interface",
+        "show failover state"
+      ],
+      "notes": ["Not all platforms support every failover subcommand."]
+    },
+    {
+      "id": "system-health",
+      "title": "System health snapshot",
+      "category": "system",
+      "summary": "Version, CPU, memory, connections, ASP drops, and recent logs.",
+      "keywords": ["cpu", "memory", "health", "asp drop", "version", "logs"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show version",
+        "show cpu usage",
+        "show memory",
+        "show processes cpu-usage sorted non-zero",
+        "show conn count",
+        "show asp drop",
+        "show logging"
+      ]
+    },
+    {
+      "id": "asp-drops",
+      "title": "ASP drop investigation",
+      "category": "system",
+      "summary": "Inspect the ASP drop counters and the paths that are dropping packets.",
+      "keywords": ["asp drop", "drops", "packet loss", "inspect", "health"],
+      "tags": ["drops"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["enable mode"],
+      "steps": [
+        "show asp drop",
+        "show asp drop flow",
+        "show conn count"
+      ]
+    },
+    {
+      "id": "dhcp-debug",
+      "title": "DHCP debugs",
+      "category": "dhcp",
+      "summary": "Inspect DHCP bindings and enable DHCP daemon packet debugging.",
+      "keywords": ["dhcp", "debug", "lease", "binding", "address"],
+      "tags": ["dhcp", "debug"],
+      "severity": "caution",
+      "effect": "debug",
+      "requires": ["enable mode", "ASA DHCP server enabled"],
+      "steps": [
+        "show dhcpd binding",
+        "show dhcpd statistics",
+        "debug dhcpd packet",
+        { "instruction": "Renew the client lease, then inspect the log." },
+        "show logging | include DHCP"
+      ],
+      "cleanup": ["no debug dhcpd packet"]
+    }
+  ]
+}

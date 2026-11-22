@@ -1,0 +1,283 @@
+{
+  "id": "macos",
+  "name": "macOS",
+  "vendor": "Apple",
+  "family": "Endpoint",
+  "description": "macOS workstations and laptops. Interfaces, DNS, tcpdump, sockets, firewall, VPN, Wi-Fi, proxy, TLS, logs, and routes.",
+  "aliases": ["mac", "osx", "macos", "apple", "macbook", "imac"],
+  "notes": [
+    "Some commands need sudo.",
+    "macOS uses scutil, networksetup, dscacheutil, and the unified log rather than Linux tools.",
+    "Interface names are usually en0 (Wi-Fi), en1, or a utun for VPN."
+  ],
+  "categories": [
+    { "id": "connectivity", "name": "Connectivity", "description": "Interfaces, routes, ping, trace, and port tests." },
+    { "id": "dns", "name": "DNS", "description": "Resolver configuration and lookups." },
+    { "id": "capture", "name": "Packet capture", "description": "Bounded tcpdump captures." },
+    { "id": "ports", "name": "Ports & processes", "description": "Listening sockets and processes." },
+    { "id": "firewall", "name": "Firewall", "description": "Application firewall and PF." },
+    { "id": "vpn", "name": "VPN", "description": "Network Connect profiles and utun routes." },
+    { "id": "wifi", "name": "Wi-Fi", "description": "Airport interfaces and wireless diagnostics." },
+    { "id": "proxy", "name": "Proxy", "description": "System and per-service proxy settings." },
+    { "id": "tls", "name": "TLS / HTTP", "description": "Certificates and HTTP checks." },
+    { "id": "logs", "name": "Logs", "description": "Unified log and kernel messages." },
+    { "id": "system", "name": "System health", "description": "OS, memory, disks, and load." },
+    { "id": "routes", "name": "Routes & ARP", "description": "Routing table and neighbor cache." },
+    { "id": "dhcp", "name": "DHCP", "description": "Lease details and service configuration." }
+  ],
+  "workflows": [
+    {
+      "id": "network-snapshot",
+      "title": "Network snapshot",
+      "category": "connectivity",
+      "summary": "Interfaces, routes, hardware ports, and DNS configuration.",
+      "keywords": ["ifconfig", "route", "macos", "snapshot", "dns"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "ifconfig",
+        "netstat -rn",
+        "networksetup -listallhardwareports",
+        "scutil --dns"
+      ]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity and port test",
+      "category": "connectivity",
+      "summary": "Ping, trace, route lookup, and a TCP port check.",
+      "keywords": ["ping", "traceroute", "nc", "port", "macos", "connectivity"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "dst", "prompt": "Target host or IP", "type": "hostname", "required": true },
+        { "name": "port", "prompt": "TCP port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "ping -c 4 {dst}",
+        "traceroute {dst}",
+        "route -n get {dst}",
+        "nc -vz {dst} {port}",
+        "netstat -rn"
+      ]
+    },
+    {
+      "id": "dns-check",
+      "title": "DNS resolution and resolver",
+      "category": "dns",
+      "summary": "Query a name, optionally through a specific server, and inspect the resolver.",
+      "keywords": ["dns", "dig", "scutil", "dscacheutil", "macos"],
+      "tags": ["dns"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "name", "prompt": "Hostname to resolve", "type": "hostname", "required": true },
+        { "name": "dns_server", "prompt": "DNS server (optional)", "type": "hostname", "required": false }
+      ],
+      "steps": [
+        "dig {name}",
+        { "command": "dig @{dns_server} {name}", "when": { "var": "dns_server", "notEmpty": true } },
+        "dscacheutil -q host -a name {name}",
+        "scutil --dns"
+      ]
+    },
+    {
+      "id": "tcpdump-bounded",
+      "title": "Bounded packet capture",
+      "category": "capture",
+      "summary": "Capture 200 packets for a host pair and read the pcap back.",
+      "keywords": ["tcpdump", "packet capture", "pcap", "macos", "host", "sniffer"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["sudo"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "en0" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "sudo timeout 30 tcpdump -i {iface} -nn host {src} and host {dst} -c 200 -w /tmp/tstcap.pcap",
+        "sudo tcpdump -nn -r /tmp/tstcap.pcap",
+        "ls -lh /tmp/tstcap.pcap"
+      ],
+      "notes": ["The capture stops after 200 packets or 30 seconds."]
+    },
+    {
+      "id": "port-listeners",
+      "title": "Port listeners and process",
+      "category": "ports",
+      "summary": "Find listeners and the process that owns a port.",
+      "keywords": ["lsof", "netstat", "port", "listener", "macos"],
+      "tags": ["ports"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["sudo for other users' sockets"],
+      "variables": [
+        { "name": "port", "prompt": "Port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "sudo lsof -nP -iTCP:{port} -sTCP:LISTEN",
+        "sudo lsof -nP -iUDP:{port}",
+        "netstat -anv -p tcp | grep LISTEN"
+      ]
+    },
+    {
+      "id": "firewall-check",
+      "title": "Firewall and PF state",
+      "category": "firewall",
+      "summary": "Inspect the application firewall and PF rules.",
+      "keywords": ["firewall", "pf", "socketfilterfw", "macos"],
+      "tags": ["firewall"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["sudo for PF"],
+      "steps": [
+        "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate",
+        "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps",
+        "sudo pfctl -s rules",
+        "sudo pfctl -s nat"
+      ]
+    },
+    {
+      "id": "vpn-check",
+      "title": "VPN profile and utun state",
+      "category": "vpn",
+      "summary": "Inspect a Network Connect VPN profile and the routes it installs.",
+      "keywords": ["vpn", "scutil", "utun", "macos", "route"],
+      "tags": ["vpn"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "vpn", "prompt": "VPN connection name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "scutil --nc list",
+        "scutil --nc status \"{vpn}\"",
+        "ifconfig | grep -A 4 utun",
+        "netstat -rn"
+      ]
+    },
+    {
+      "id": "wifi-check",
+      "title": "Wi-Fi state",
+      "category": "wifi",
+      "summary": "Inspect the wireless interface, current network, and detailed RF info.",
+      "keywords": ["wifi", "airport", "wdutil", "macos", "wireless"],
+      "tags": ["wifi"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["sudo for wdutil"],
+      "steps": [
+        "networksetup -listallhardwareports",
+        "networksetup -getairportnetwork en0",
+        "system_profiler SPAirPortDataType",
+        "sudo wdutil info"
+      ]
+    },
+    {
+      "id": "proxy-check",
+      "title": "Proxy configuration",
+      "category": "proxy",
+      "summary": "Inspect system proxy settings and the Wi-Fi service proxies.",
+      "keywords": ["proxy", "scutil", "networksetup", "macos"],
+      "tags": ["proxy"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "scutil --proxy",
+        "networksetup -getwebproxy \"Wi-Fi\"",
+        "networksetup -getsecurewebproxy \"Wi-Fi\""
+      ]
+    },
+    {
+      "id": "tls-check",
+      "title": "TLS and HTTP endpoint",
+      "category": "tls",
+      "summary": "Test a TLS endpoint and print the certificate chain.",
+      "keywords": ["tls", "openssl", "certificate", "https", "macos"],
+      "tags": ["tls"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "host", "prompt": "Hostname", "type": "hostname", "required": true },
+        { "name": "port", "prompt": "TLS port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "openssl s_client -connect {host}:{port} -servername {host} -brief",
+        "curl -v --connect-timeout 10 https://{host}:{port}/"
+      ]
+    },
+    {
+      "id": "logs",
+      "title": "Unified log and kernel messages",
+      "category": "logs",
+      "summary": "Read recent network and kernel log entries.",
+      "keywords": ["log", "unified log", "kernel", "macos", "dmesg"],
+      "tags": ["logs"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "log show --last 10m --predicate 'subsystem == \"com.apple.network\"'",
+        "log show --last 5m --predicate 'process == \"kernel\"'",
+        "sudo dmesg | tail -40"
+      ]
+    },
+    {
+      "id": "system-health",
+      "title": "System health",
+      "category": "system",
+      "summary": "OS version, uptime, memory, disks, and load.",
+      "keywords": ["health", "memory", "disk", "uptime", "macos"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "sw_vers",
+        "uptime",
+        "vm_stat",
+        "df -h",
+        "top -l 1 | head -20"
+      ]
+    },
+    {
+      "id": "routes-arp",
+      "title": "Routes and ARP",
+      "category": "routes",
+      "summary": "Inspect the routing table, a specific route, and the neighbor cache.",
+      "keywords": ["route", "arp", "gateway", "macos"],
+      "tags": ["routes"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "netstat -rn",
+        "route -n get {dst}",
+        "arp -a",
+        "networksetup -getinfo \"Wi-Fi\""
+      ]
+    },
+    {
+      "id": "dhcp-check",
+      "title": "DHCP and service configuration",
+      "category": "dhcp",
+      "summary": "Inspect the DHCP packet for an interface and the Wi-Fi service configuration.",
+      "keywords": ["dhcp", "lease", "ipconfig", "networksetup", "macos"],
+      "tags": ["dhcp"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "en0" }
+      ],
+      "steps": [
+        "ipconfig getpacket {iface}",
+        "networksetup -getinfo \"Wi-Fi\"",
+        "scutil --dns"
+      ]
+    }
+  ]
+}

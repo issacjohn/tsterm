@@ -1,0 +1,87 @@
+{
+  "id": "generic-network",
+  "name": "Generic network device",
+  "vendor": "Generic",
+  "family": "Other",
+  "description": "A safe fallback for a CLI device that is not in the library yet. Includes basic reachability, interface, and log checks.",
+  "aliases": ["generic", "unknown", "other", "fallback", "network device"],
+  "notes": [
+    "This pack is a starting point, not a guarantee. Add a real device pack for accurate commands.",
+    "Use Settings > Data & packs > New device type to clone and extend this pack."
+  ],
+  "categories": [
+    { "id": "connectivity", "name": "Connectivity", "description": "Basic reachability and path checks." },
+    { "id": "system", "name": "System", "description": "Version, logs, and interfaces." },
+    { "id": "config", "name": "Configuration", "description": "Read-only configuration evidence." }
+  ],
+  "workflows": [
+    {
+      "id": "reachability",
+      "title": "Reachability and path",
+      "category": "connectivity",
+      "summary": "Ping, traceroute, and interface status for a target.",
+      "keywords": ["ping", "traceroute", "reachability", "route", "generic"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "dst", "prompt": "Target IP or hostname", "type": "hostname", "required": true, "placeholder": "8.8.8.8" }
+      ],
+      "steps": [
+        "ping {dst}",
+        "traceroute {dst}",
+        "show ip route {dst}",
+        "show interfaces"
+      ],
+      "notes": ["Command syntax varies. Replace these with the platform's actual commands."]
+    },
+    {
+      "id": "version-logs",
+      "title": "Version and recent logs",
+      "category": "system",
+      "summary": "Collect version and recent log output as evidence.",
+      "keywords": ["version", "logs", "system", "evidence", "generic"],
+      "tags": ["evidence"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "show version",
+        "show logging",
+        "show clock"
+      ]
+    },
+    {
+      "id": "interface-status",
+      "title": "Interface status",
+      "category": "system",
+      "summary": "Check a specific interface's link state and counters.",
+      "keywords": ["interface", "link", "errors", "counters", "generic"],
+      "tags": ["interface"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "required": true }
+      ],
+      "steps": [
+        "show interface {iface}",
+        "show interface {iface} counters",
+        "show ip interface brief"
+      ]
+    },
+    {
+      "id": "config-snapshot",
+      "title": "Configuration snapshot",
+      "category": "config",
+      "summary": "Collect the running configuration for review.",
+      "keywords": ["config", "running-config", "backup", "evidence", "generic"],
+      "tags": ["config"],
+      "severity": "caution",
+      "effect": "read",
+      "steps": [
+        "show running-config",
+        "show startup-config"
+      ],
+      "notes": ["Configuration output may contain secrets. Review before sharing outside your team."]
+    }
+  ]
+}

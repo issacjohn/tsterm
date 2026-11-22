@@ -1,0 +1,80 @@
+import { Command, PanelLeft, Settings, ShieldAlert, Sparkles, TerminalSquare } from 'lucide-react'
+import { useAppStore } from '../store'
+import { modifierLabel } from '../lib/format'
+import { Logo } from './ui/Logo'
+
+interface TopBarProps {
+  onToggleSidebar: () => void
+  onOpenSettings: () => void
+  onOpenPalette: () => void
+  onOpenDebug: () => void
+}
+
+export function TopBar({
+  onToggleSidebar,
+  onOpenSettings,
+  onOpenPalette,
+  onOpenDebug
+}: TopBarProps): React.JSX.Element {
+  const debugSessions = useAppStore((state) => state.debugSessions)
+  const tabs = useAppStore((state) => state.tabs)
+  const platform = useAppStore((state) => state.appPlatform)
+  const connected = tabs.reduce(
+    (count, tab) => count + tab.panes.filter((pane) => pane.status === 'connected').length,
+    0
+  )
+  const mod = modifierLabel(platform)
+
+  return (
+    <header className="topbar">
+      <div className="brand">
+        <Logo />
+        <div className="brand-copy">
+          <span className="wordmark">
+            TS<span>Term</span>
+          </span>
+          <span className="brand-sub">Troubleshooting console</span>
+        </div>
+      </div>
+
+      <button className="command-trigger" onClick={onOpenPalette} title={`Open command palette (${mod}+Shift+P)`}>
+        <Command size={15} />
+        <span>Search hosts, devices, commands…</span>
+        <span className="shortcut">
+          <kbd>{mod}</kbd>
+          <kbd>⇧</kbd>
+          <kbd>P</kbd>
+        </span>
+      </button>
+
+      <div className="topbar-actions">
+        <span className={`connection-count${connected ? ' live' : ''}`} title={`${connected} live session${connected === 1 ? '' : 's'}`}>
+          <TerminalSquare size={14} />
+          <span>{connected || '—'}</span>
+        </span>
+
+        {debugSessions.length > 0 ? (
+          <button className="debug-chip" onClick={onOpenDebug} title="Review active debug sessions">
+            <ShieldAlert size={14} />
+            <span>{debugSessions.length}</span>
+            <span className="debug-label">debug{debugSessions.length === 1 ? '' : 's'}</span>
+          </button>
+        ) : (
+          <button className="icon-btn" onClick={onOpenDebug} title="Debug session guard">
+            <ShieldAlert size={17} />
+          </button>
+        )}
+
+        <button className="icon-btn" onClick={onToggleSidebar} title="Toggle sidebar">
+          <PanelLeft size={18} />
+        </button>
+        <button className="icon-btn" onClick={onOpenSettings} title={`Settings (${mod}+,)`}>
+          <Settings size={18} />
+        </button>
+        <button className="icon-btn subtle" onClick={onOpenPalette} title="Command palette">
+          <Sparkles size={16} />
+        </button>
+      </div>
+    </header>
+  )
+}

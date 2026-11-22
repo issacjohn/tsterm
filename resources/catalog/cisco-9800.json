@@ -1,0 +1,187 @@
+{
+  "id": "cisco-9800",
+  "name": "Cisco Catalyst 9800",
+  "vendor": "Cisco",
+  "family": "Wireless",
+  "description": "Catalyst 9800 wireless controller on IOS-XE. Adds wireless client, AP, CAPWAP, RADIUS, roaming, and RF runbooks to the IOS-XE base set.",
+  "extends": "cisco-ios",
+  "aliases": ["9800", "catalyst 9800", "c9800", "ios-xe wireless", "wireless controller"],
+  "notes": [
+    "Inherits the Cisco IOS / IOS-XE runbooks (capture, routing, AAA, NAT, interfaces).",
+    "Wireless debug output can be extensive. Always use the cleanup commands.",
+    "The 9800 uses IOS-XE CLI syntax, not AireOS syntax."
+  ],
+  "categories": [
+    { "id": "wireless", "name": "Wireless", "description": "Clients, APs, CAPWAP, roaming, RF, and WLANs." }
+  ],
+  "workflows": [
+    {
+      "id": "wlc-client-detail",
+      "title": "Wireless client detail",
+      "category": "wireless",
+      "summary": "Inspect a wireless client's state, AP, authentication, and statistics.",
+      "keywords": ["wireless", "client", "mac", "9800", "authentication", "rssi"],
+      "tags": ["wireless", "client"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["privilege 15"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true, "placeholder": "0011.2233.4455" }
+      ],
+      "steps": [
+        "show wireless client summary",
+        "show wireless client mac-address {mac} detail",
+        "show wireless client mac-address {mac} statistics"
+      ]
+    },
+    {
+      "id": "wlc-client-debug",
+      "title": "Wireless client debug",
+      "category": "wireless",
+      "summary": "Enable a client-specific wireless debug, reproduce the issue, and stop the debug.",
+      "keywords": ["wireless", "debug", "client", "mac", "join", "9800"],
+      "tags": ["wireless", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["privilege 15", "maintenance window"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        "terminal monitor",
+        "debug wireless mac {mac}",
+        { "instruction": "Reconnect or roam the client, then inspect the output." },
+        "show wireless client mac-address {mac} detail",
+        "show logging | include {mac}"
+      ],
+      "cleanup": [
+        "no debug wireless mac {mac}",
+        "terminal no monitor"
+      ],
+      "notes": ["If this release uses a different wireless debug keyword, confirm with the command reference before running."]
+    },
+    {
+      "id": "wlc-client-radius",
+      "title": "Wireless 802.1X / RADIUS flow",
+      "category": "wireless",
+      "summary": "Inspect client authentication state and the 9800's RADIUS/AAA configuration.",
+      "keywords": ["wireless", "radius", "dot1x", "802.1x", "aaa", "authentication"],
+      "tags": ["wireless", "radius"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["privilege 15"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        "show wireless client mac-address {mac} detail",
+        "show aaa servers",
+        "show radius statistics",
+        "show wireless client summary"
+      ],
+      "notes": ["Use the inherited 'radius-debug' runbook for live RADIUS debug output."]
+    },
+    {
+      "id": "wlc-ap-join",
+      "title": "AP join and inventory",
+      "category": "wireless",
+      "summary": "Check the AP inventory, join state, and Ethernet tag configuration.",
+      "keywords": ["wireless", "ap", "join", "capwap", "9800", "inventory"],
+      "tags": ["wireless", "ap"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["privilege 15"],
+      "variables": [
+        { "name": "ap", "prompt": "AP name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show ap summary",
+        "show ap name {ap} config general",
+        "show ap name {ap} ethernet tag info",
+        "show wireless stats ap join summary"
+      ]
+    },
+    {
+      "id": "wlc-capwap-debug",
+      "title": "CAPWAP AP join debug",
+      "category": "wireless",
+      "summary": "Enable CAPWAP event and packet debugging while an AP joins the 9800.",
+      "keywords": ["wireless", "capwap", "ap", "join", "debug", "9800"],
+      "tags": ["wireless", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["privilege 15", "maintenance window"],
+      "steps": [
+        "terminal monitor",
+        "debug capwap events",
+        "debug capwap packets",
+        { "instruction": "Reboot or reconnect the AP, then watch the join attempt." },
+        "show ap summary",
+        "show logging | include CAPWAP"
+      ],
+      "cleanup": [
+        "no debug capwap events",
+        "no debug capwap packets",
+        "terminal no monitor"
+      ]
+    },
+    {
+      "id": "wlc-roaming",
+      "title": "Wireless roaming and mobility",
+      "category": "wireless",
+      "summary": "Check mobility state, the client's current AP, and roaming behavior.",
+      "keywords": ["wireless", "roaming", "mobility", "client", "9800"],
+      "tags": ["wireless", "roaming"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["privilege 15"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        "show wireless mobility summary",
+        "show wireless client mac-address {mac} detail",
+        "show wireless client summary",
+        "show ap summary"
+      ]
+    },
+    {
+      "id": "wlc-rf",
+      "title": "Wireless RF health",
+      "category": "wireless",
+      "summary": "Inspect radio state, channel utilization, and client RF details.",
+      "keywords": ["wireless", "rf", "channel", "interference", "radio", "9800"],
+      "tags": ["wireless", "rf"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["privilege 15"],
+      "variables": [
+        { "name": "mac", "prompt": "Client MAC address", "type": "mac", "required": true }
+      ],
+      "steps": [
+        "show ap dot11 5ghz summary",
+        "show ap dot11 24ghz summary",
+        "show wireless client mac-address {mac} detail"
+      ]
+    },
+    {
+      "id": "wlc-wlan",
+      "title": "WLAN and SSID configuration",
+      "category": "wireless",
+      "summary": "Verify a WLAN profile, its policy, and the clients currently using it.",
+      "keywords": ["wireless", "wlan", "ssid", "policy", "9800"],
+      "tags": ["wireless", "wlan"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["privilege 15"],
+      "variables": [
+        { "name": "wlan", "prompt": "WLAN profile name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "show wlan summary",
+        "show wlan name {wlan}",
+        "show wireless client summary"
+      ]
+    }
+  ]
+}
