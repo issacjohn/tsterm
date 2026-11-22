@@ -98,6 +98,8 @@ See [docs/DEVICE_PACKS.md](docs/DEVICE_PACKS.md) for the format and a full examp
 
 ### Updates and support
 
+![Update check](screenshots/20-update-check.png)
+
 TSTerm checks the public GitHub release feed **once a day** on launch. You can also check manually from
 Settings → About. If a newer version exists, you can download it, skip that version, or turn automatic
 checks off. Nothing is installed without you.
@@ -246,6 +248,22 @@ TSTERM_TEST_USER=admin \
 TSTERM_TEST_PASSWORD=secret \
 npm run test:ui
 ```
+
+Two more opt-in tests are included:
+
+```bash
+# Starts a real RADIUS debug, quits through the guard, and checks the cleanup with show debug
+npm run test:debug-guard
+
+# Checks the live GitHub release feed from the app
+npm run test:update
+
+# Launches the packaged Windows build and checks the local shell
+npm run test:packaged
+```
+
+The debug test is the only one that changes a device, and it restores the debug state before it finishes.
+See [docs/TESTING.md](docs/TESTING.md) for the details.
 
 **Lab verification:** the included UI tests and a live debug-cleanup test were run against a
 **Cisco ASA Software 9.24(10)** appliance. Confirmed:

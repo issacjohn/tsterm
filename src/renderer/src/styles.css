@@ -4298,6 +4298,25 @@ input[type="range"] {
   line-height: 1.5;
 }
 
+.settings-inline-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.settings-inline-status.error {
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--border));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .coffee-card {
   display: flex;
   align-items: center;
@@ -4994,6 +5013,17 @@ input[type="range"] {
   gap: 5px;
   color: var(--accent);
   font-size: 9px;
+}
+
+.runbook-copied {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  color: var(--accent);
+  font-size: 8.5px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .runbook-footer-left {

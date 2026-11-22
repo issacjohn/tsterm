@@ -240,6 +240,8 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
   const [activeTab, setActiveTab] = useState<SettingsTab>(tab)
   const [checking, setChecking] = useState(false)
   const [reloadBusy, setReloadBusy] = useState(false)
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
+  const [updateError, setUpdateError] = useState(false)
   const theme = getTerminalTheme(settings)
 
   const update = (patch: Partial<AppSettings>): void => saveSettings(patch)
@@ -261,20 +263,20 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
 
   const checkUpdates = async (): Promise<void> => {
     setChecking(true)
+    setUpdateMessage(null)
+    setUpdateError(false)
     try {
       const result = await window.tsterm.updates.check(true)
       if (result.available && result.update) {
         setModal({ kind: 'update', info: result.update, manual: true })
       } else {
-        notify({
-          kind: 'info',
-          title: result.checked ? 'TSTerm is up to date' : 'Update check',
-          message: result.reason || `You are on the latest version (${bootstrap?.appVersion ?? '0.1.0'}).`,
-          duration: 5000
-        })
+        setUpdateMessage(
+          result.reason || `You are on the latest version (${bootstrap?.appVersion ?? '0.1.0'}).`
+        )
       }
     } catch (error) {
-      notify({ kind: 'error', title: 'Update check failed', message: (error as Error).message })
+      setUpdateError(true)
+      setUpdateMessage((error as Error).message)
     } finally {
       setChecking(false)
     }
@@ -790,6 +792,12 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                   </button>
                 ) : null}
               </div>
+              {updateMessage ? (
+                <div className={`settings-inline-status${updateError ? ' error' : ''}`}>
+                  {updateError ? <ShieldCheck size={14} /> : <Check size={14} />}
+                  <span>{updateMessage}</span>
+                </div>
+              ) : null}
               <p className="about-fineprint">
                 Update checks only read the latest public release from GitHub. Downloads are always manual.
               </p>

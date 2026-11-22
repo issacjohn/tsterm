@@ -25,6 +25,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:ui": "node scripts/ui-smoke.mjs",
+    "test:debug-guard": "node scripts/ui-debug-close.mjs",
+    "test:update": "node scripts/update-smoke.mjs",
+    "test:packaged": "node scripts/package-smoke.mjs",
     "icon": "node scripts/make-icon.mjs",
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"

@@ -29,6 +29,7 @@ export function RunbookModal(): React.JSX.Element | null {
   const setModal = useAppStore((state) => state.setModal)
   const [ack, setAck] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState<'commands' | 'runbook' | null>(null)
 
   const runbookModal = modal?.kind === 'runbook' ? modal : null
   const type = runbookModal ? catalog.types.find((item) => item.id === runbookModal.typeId) : undefined
@@ -64,6 +65,8 @@ export function RunbookModal(): React.JSX.Element | null {
       sessionId: runbookModal.sessionId,
       mode: 'copy'
     })
+    setCopied('commands')
+    window.setTimeout(() => setCopied(null), 3000)
     notify({
       kind: 'success',
       title: 'Commands copied',
@@ -90,6 +93,8 @@ export function RunbookModal(): React.JSX.Element | null {
       sessionId: runbookModal.sessionId,
       mode: 'copy'
     })
+    setCopied('runbook')
+    window.setTimeout(() => setCopied(null), 3000)
     notify({
       kind: 'success',
       title: 'Runbook copied',
@@ -138,13 +143,20 @@ export function RunbookModal(): React.JSX.Element | null {
                 <ShieldCheck size={14} /> Read-only runbook
               </span>
             )}
+            {copied ? (
+              <span className="runbook-copied">
+                <Check size={13} /> Copied to clipboard
+              </span>
+            ) : null}
           </div>
           <div className="runbook-footer-actions">
             <button className="btn btn-ghost" onClick={() => void copyRunbook()}>
-              <ClipboardCopy size={14} /> Copy runbook
+              {copied === 'runbook' ? <Check size={14} /> : <ClipboardCopy size={14} />}
+              {copied === 'runbook' ? 'Runbook copied' : 'Copy runbook'}
             </button>
             <button className="btn" onClick={() => void copyCommands()} disabled={!commands.length}>
-              <ClipboardCopy size={14} /> Copy commands
+              {copied === 'commands' ? <Check size={14} /> : <ClipboardCopy size={14} />}
+              {copied === 'commands' ? 'Copied' : 'Copy commands'}
             </button>
             {canSend ? (
               <button

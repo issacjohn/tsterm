@@ -80,6 +80,17 @@ node scripts/ui-debug-close.mjs
 Only run this against a device you own or a lab device you are authorized to change. The test leaves the
 device in the same debug state it found (clean).
 
+## Update and packaged-app checks
+
+```bash
+npm run test:update
+npm run test:packaged
+```
+
+`test:update` calls the live GitHub release feed from inside the app and confirms the installed version is
+reported correctly. `test:packaged` launches `release/win-unpacked/TSTerm.exe` and verifies the local
+PowerShell session, so it should be run after `npm run package`.
+
 ## Manual lab notes
 
 The current release was verified on a Cisco ASA Software 9.24(10) appliance with:
