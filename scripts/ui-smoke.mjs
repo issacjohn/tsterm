@@ -97,16 +97,6 @@ try {
   await shot('05-session.png')
 
   await page.locator('.terminal-host').click()
-  await page.keyboard.type('deb')
-  await page.waitForTimeout(500)
-  const ghost = (await page.locator('.terminal-ghost').textContent())?.trim() || ''
-  if (!ghost) throw new Error('Inline next-word suggestion did not appear.')
-  await shot('06-suggestions.png')
-  await page.keyboard.press('Tab')
-  await page.waitForTimeout(350)
-  await page.keyboard.press('Control+c')
-  await page.waitForTimeout(250)
-
   await page.keyboard.type('show version')
   await page.keyboard.press('Enter')
   await page.waitForTimeout(3800)
@@ -117,6 +107,13 @@ try {
     await page.waitForTimeout(500)
   }
   await shot('07-terminal-show-version.png')
+
+  await page.locator('.terminal-host').click()
+  await page.keyboard.type('deb')
+  await page.waitForTimeout(500)
+  const ghost = (await page.locator('.terminal-ghost').textContent())?.trim() || ''
+  if (!ghost) throw new Error('Inline next-word suggestion did not appear.')
+  await shot('06-suggestions.png')
 
   const tsSearch = page.locator('input[aria-label="Search troubleshooting runbooks"]')
   await tsSearch.fill('radius')

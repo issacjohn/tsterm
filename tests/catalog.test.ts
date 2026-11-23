@@ -99,4 +99,46 @@ describe('bundled catalog', () => {
       }
     }
   })
+
+  it('ships the expanded ASA troubleshooting library', () => {
+    const asa = bundle.types.find((type) => type.id === 'cisco-asa')!
+    expect(asa.workflows).toHaveLength(77)
+    expect(asa.categories).toHaveLength(14)
+    expect(asa.workflows.some((workflow) => workflow.id === 'capture-asp-drop')).toBe(true)
+    expect(asa.workflows.some((workflow) => workflow.id === 'vpn-session-filter')).toBe(true)
+    expect(asa.workflows.some((workflow) => workflow.id === 'license-status')).toBe(true)
+    expect(asa.workflows.some((workflow) => workflow.id === 'tech-support')).toBe(true)
+    const total = bundle.types.reduce((count, type) => count + type.workflows.length, 0)
+    expect(total).toBe(236)
+  })
+
+  it('uses the ASA capture syntax verified on the lab device', () => {
+    const asa = bundle.types.find((type) => type.id === 'cisco-asa')!
+    for (const workflow of asa.workflows.filter((item) => item.effect === 'capture')) {
+      const commands = workflow.steps
+        .map((step) => step.command)
+        .filter((command): command is string => Boolean(command))
+      expect(commands.some((command) => command.includes('buffer bytes')), workflow.id).toBe(false)
+      expect(commands.some((command) => command === 'capture TSTCAP buffer 33554432'), workflow.id).toBe(true)
+      if (workflow.id === 'capture-acl' || workflow.id === 'capture-vpn-esp') {
+        expect(commands.some((command) => command.startsWith('capture TSTCAP interface') && command.includes('access-list TSTCAP_ACL')), workflow.id).toBe(true)
+        expect(commands.some((command) => command.includes('match access-list')), workflow.id).toBe(false)
+        expect(
+          workflow.cleanup.some((step) => step.command === 'clear configure access-list TSTCAP_ACL'),
+          workflow.id
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('uses tested undebug cleanup for ASA debugs', () => {
+    const asa = bundle.types.find((type) => type.id === 'cisco-asa')!
+    for (const workflow of asa.workflows.filter((item) => item.effect === 'debug')) {
+      for (const step of workflow.cleanup) {
+        if (step.command && /^no debug/.test(step.command)) {
+          throw new Error(`${workflow.id} still uses '${step.command}' instead of undebug`)
+        }
+      }
+    }
+  })
 })

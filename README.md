@@ -36,11 +36,11 @@ No browser tabs full of half-remembered commands. No forgotten `undebug all` at 
 
 ### Device-aware runbooks
 
-The bundled catalog contains **13 device packs and 180 runbooks**, covering:
+The bundled catalog contains **13 device packs and 236 runbooks**, covering:
 
 | Platform | What is covered |
 | --- | --- |
-| Cisco ASA | VPN, AnyConnect, IKEv2/IPsec, RADIUS/AAA, captures, NAT, routing, failover, ASP drops, DHCP |
+| Cisco ASA | **77 runbooks** — VPN, AnyConnect, IKEv1/IKEv2/IPsec, RADIUS/TACACS+/LDAP/User-ID, captures (host, subnet, ACL, ASP drop, decrypted), NAT, OSPF/EIGRP/BGP/multicast/IPv6, failover and clustering, licenses, logging, threat detection, and more |
 | Cisco IOS / IOS-XE | EPC captures, BGP/OSPF/EIGRP, RADIUS/TACACS+, IPsec/DMVPN, NAT, STP, multicast, health |
 | Cisco Nexus | Ethanalyzer, vPC, port-channels/LACP, BGP/OSPF, AAA, FEX, STP, multicast, NAT |
 | Cisco FTD | FMC capture, diagnostic CLI, packet-tracer, connections, VPN, AAA, deployment, expert mode |
@@ -275,6 +275,9 @@ See [docs/TESTING.md](docs/TESTING.md) for the details.
   after cleanup.
 - Cleanup file creation in the app data `exports/` folder.
 - Local PowerShell, snippets, and custom device pack creation.
+- 77 ASA runbooks across 14 categories, including capture-buffer, ACL-capture, and debug cleanup syntax
+  corrected against the live device (`capture TSTCAP buffer 33554432`, `clear configure access-list`,
+  `undebug`).
 
 Think before you paste. The catalog is a knowledgeable assistant, not a substitute for change control.
 

@@ -105,7 +105,12 @@ The current release was verified on a Cisco ASA Software 9.24(10) appliance with
   cleanup.
 
 The ASA pack was corrected after testing: it uses `terminal monitor` / `terminal no monitor`, not
-`logging console` (which is not available in that form).
+`logging console` (which is not available in that form). The ASA capture buffer is now set after creation
+(`capture TSTCAP buffer 33554432`), ACL captures use `capture ... access-list TSTCAP_ACL`, ACL cleanup uses
+`clear configure access-list TSTCAP_ACL`, and debug cleanup uses the tested `undebug` form.
+
+The ASA pack currently contains 77 runbooks across 14 categories; the full catalog contains 236 runbooks.
+
 
 ## Test credentials
 

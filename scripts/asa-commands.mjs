@@ -23,6 +23,7 @@ const commands = process.argv.slice(2).length
     ]
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const commandDelay = Math.max(600, Number(process.env.TSTERM_COMMAND_DELAY || 2200))
 let output = ''
 let stream = null
 let lastSpace = 0
@@ -41,7 +42,7 @@ const finish = (code = 0) => {
     .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
     .replace(/\x1b\][^\x07]*\x07/g, '')
     .replace(/\r/g, '')
-  console.log(clean.slice(-30000))
+  console.log(process.env.TSTERM_FULL_OUTPUT ? clean : clean.slice(-30000))
   try {
     client.end()
   } catch {
@@ -67,7 +68,7 @@ client.on('ready', () => {
     await sleep(1200)
     for (const command of commands) {
       stream.write(`${command}\n`)
-      await sleep(2200)
+      await sleep(commandDelay)
     }
     await sleep(2500)
     clearTimeout(timeout)

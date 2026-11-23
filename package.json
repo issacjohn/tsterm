@@ -1,7 +1,7 @@
 {
   "name": "tsterm",
   "productName": "TSTerm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A desktop troubleshooting console for the device in front of you. SSH, local shells, device-aware runbooks, inline command prediction, and a debug guard.",
   "main": "./out/main/index.js",
   "author": "Issac John",
