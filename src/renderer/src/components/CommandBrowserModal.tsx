@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -24,7 +24,7 @@ import type {
   CommandStatusResult
 } from '@shared/types'
 import { renderCommand, riskLabel, validateParameter } from '@shared/command-utils'
-import { isSmallModelName } from '@shared/ai-utils'
+import { isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
 import { activePane, useAppStore } from '../store'
 import {
   fillTerminalPrompt,
@@ -110,6 +110,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   const [progress, setProgress] = useState<CommandIndexProgress | null>(null)
   const [building, setBuilding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const autoIndexRef = useRef(false)
 
   const profile =
     settings.aiProfiles.find((item) => item.id === settings.aiActiveProfileId) ??
@@ -121,11 +122,69 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   }
 
   useEffect(() => {
-    refreshStatus()
-    return window.tsterm.commands.onIndexProgress((next) => {
+    let cancelled = false
+    const unsubscribe = window.tsterm.commands.onIndexProgress((next) => {
       setProgress(next)
       if (next.phase === 'done') refreshStatus()
     })
+    void window.tsterm.commands
+      .status()
+      .then((current) => {
+        if (cancelled) return
+        setStatus(current)
+        if (current.vectorReady || current.indexing) return
+        if (!settings.aiEnabled || !settings.aiAutoPullLocalModels) return
+        if (!profile?.local || !isLoopbackUrl(profile.baseUrl)) return
+        const isOllama =
+          /11434|ollama/i.test(profile.baseUrl) ||
+          /ollama/i.test(profile.id) ||
+          /ollama/i.test(profile.name)
+        if (!isOllama || autoIndexRef.current) return
+        autoIndexRef.current = true
+        notify({
+          kind: 'info',
+          title: 'Preparing hybrid command search',
+          message: 'Checking the local ASA embedding model…',
+          duration: 5000
+        })
+        void window.tsterm.commands
+          .ensureIndex(profile.id)
+          .then((next) => {
+            if (cancelled) return
+            setStatus(next)
+            if (next.vectorReady) {
+              notify({
+                kind: 'success',
+                title: 'Hybrid command search ready',
+                message: `${next.vectorCount}/${next.vectorTargetCount} fillable ASA commands embedded.`,
+                duration: 6000
+              })
+            } else if (next.vectorError) {
+              notify({
+                kind: 'warning',
+                title: 'Hybrid command search is not ready',
+                message: next.vectorError,
+                duration: 9000
+              })
+            }
+          })
+          .catch((reason: unknown) => {
+            if (cancelled) return
+            notify({
+              kind: 'warning',
+              title: 'Hybrid command search is not ready',
+              message: (reason as Error).message,
+              duration: 9000
+            })
+          })
+      })
+      .catch(() => {
+        // Status is best-effort; the browser still works with BM25.
+      })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {

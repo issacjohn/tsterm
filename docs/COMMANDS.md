@@ -109,8 +109,8 @@ Free chat uses the same local catalog in addition to the runbook hints:
 
 ### Automatic hybrid setup
 
-When the AI assistant is enabled with a local Ollama profile and **Download local models automatically**
-is on, TSTerm:
+When the command reference is opened with the AI assistant enabled, a local Ollama profile, and
+**Download local models automatically** on, TSTerm:
 
 1. checks for `nomic-embed-text`,
 2. pulls it through Ollama if it is missing,

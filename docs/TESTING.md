@@ -160,7 +160,9 @@ node scripts/commands-ui-smoke.mjs
 ```
 
 Set `TSTERM_BUILD_VECTORS=1` to click **Build vector index** and wait for the footer to switch from
-`BM25 only` to `Hybrid · 503/503 curated embedded`. Set `TSTERM_COMMANDS_PACKAGED=1` to run the same checks against
+`BM25 only` to `Hybrid · 503/503 curated embedded`. The same check runs automatically when the command
+browser is opened with AI and automatic local model downloads enabled; the button remains as a manual
+retry. Set `TSTERM_COMMANDS_PACKAGED=1` to run the same checks against
 `release/win-unpacked/TSTerm.exe`. Screenshots are written to `screenshots/commands-*.png`.
 
 The AI routing UI test requires Ollama plus `qwen3:8b`. It presets a temporary profile, asks the real

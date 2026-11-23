@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import type { MenuCommand } from '@shared/types'
-import { isLoopbackUrl } from '@shared/ai-utils'
 import { activePane, useAppStore } from './store'
 import {
   closeActiveTab,
@@ -56,7 +55,6 @@ export default function App(): React.JSX.Element {
   const showTroubleshoot = useAppStore((state) => state.showTroubleshoot)
   const tabs = useAppStore((state) => state.tabs)
   const [bootError, setBootError] = useState<string | null>(null)
-  const autoIndexAttempt = useRef<string | null>(null)
 
   useEffect(() => {
     let disposed = false
@@ -191,65 +189,6 @@ export default function App(): React.JSX.Element {
     // Run once per launch after the workspace is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
-
-  useEffect(() => {
-    if (!ready || !settings.aiEnabled || !settings.aiAutoPullLocalModels) return
-    const profile =
-      settings.aiProfiles.find((item) => item.id === settings.aiActiveProfileId) ??
-      settings.aiProfiles[0]
-    if (!profile?.local || !isLoopbackUrl(profile.baseUrl)) return
-    const isOllama =
-      /11434|ollama/i.test(profile.baseUrl) ||
-      /ollama/i.test(profile.id) ||
-      /ollama/i.test(profile.name)
-    if (!isOllama) return
-    const key = `${profile.id}:${profile.baseUrl}`
-    if (autoIndexAttempt.current === key) return
-    autoIndexAttempt.current = key
-    const notify = useAppStore.getState().notify
-    void window.tsterm.commands
-      .status()
-      .then((current) => {
-        if (current.vectorReady) return
-        notify({
-          kind: 'info',
-          title: 'Preparing hybrid command search',
-          message: 'Checking the local ASA embedding model…',
-          duration: 5000
-        })
-        return window.tsterm.commands.ensureIndex(profile.id).then((next) => {
-          if (next.vectorReady) {
-            notify({
-              kind: 'success',
-              title: 'Hybrid command search ready',
-              message: `${next.vectorCount}/${next.vectorTargetCount} fillable ASA commands embedded.`,
-              duration: 6000
-            })
-          } else if (next.vectorError) {
-            notify({
-              kind: 'warning',
-              title: 'Hybrid command search is not ready',
-              message: next.vectorError,
-              duration: 9000
-            })
-          }
-        })
-      })
-      .catch((error: unknown) => {
-        notify({
-          kind: 'warning',
-          title: 'Hybrid command search is not ready',
-          message: (error as Error).message,
-          duration: 9000
-        })
-      })
-  }, [
-    ready,
-    settings.aiEnabled,
-    settings.aiAutoPullLocalModels,
-    settings.aiActiveProfileId,
-    settings.aiProfiles
-  ])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

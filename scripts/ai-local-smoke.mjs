@@ -9,7 +9,7 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'tsterm-ai-local-'))
 const shots = path.join(ROOT, 'screenshots')
 fs.mkdirSync(shots, { recursive: true })
 
-const MODEL = 'llama3.2'
+const MODEL = 'qwen3:8b'
 const REPLY = [
   'Start with the interface counters.',
   '',

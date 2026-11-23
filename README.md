@@ -150,10 +150,11 @@ through the Electron main process, so the renderer never receives terminal-execu
 Free chat also retrieves the top five matching command records from the local ASA catalog. Follow-up
 questions such as “why did that fail?” automatically include recent `%ASA-...` syslog IDs and the last
 terminal command in the retrieval query. Runbook matching is partial and stemmed, so natural-language
-questions are not rejected just because one word is missing. When automatic local model downloads are
-enabled, TSTerm also installs `nomic-embed-text` and builds the fillable-command vector index in the
-background. Ollama requests disable thinking tokens with `think: false`; DeepSeek R1 receives a larger
-answer budget, and literal `<think>` blocks are filtered from the stream.
+questions are not rejected just because one word is missing. When you open the command reference with
+automatic local model downloads enabled, TSTerm installs `nomic-embed-text` if needed and builds the
+fillable-command vector index in the background. Ollama requests disable thinking tokens with
+`think: false`; DeepSeek R1 receives a larger answer budget, and literal `<think>` blocks are filtered
+from the stream.
 
 Runbook details include an **Ask AI** action that opens the assistant with that workflow as the topic, so
 you can ask what to verify before and after without retyping the commands.

@@ -37,8 +37,8 @@
   local catalog, not just runbook summaries.
 - Runbook hints use partial, stemmed matching instead of requiring every question word to match.
 - Follow-up retrieval adds `%ASA-...` syslog IDs and the last terminal command from live output.
-- Automatic local setup checks for and pulls `nomic-embed-text`, then builds the 503-record fillable
-  command index in the background when model auto-download is enabled.
+- Opening the command reference with model auto-download enabled checks for and pulls
+  `nomic-embed-text`, then builds the 503-record fillable command index in the background.
 - Ollama chat requests disable Qwen3 thinking with `think: false`; DeepSeek R1 gets a larger answer budget.
 - Literal `<think>` / `<thinking>` blocks are removed from streamed and final text, including tags split
   across chunks.
