@@ -24,6 +24,7 @@ import type { ForwardManager } from './forwarding'
 import type { QuitCoordinator } from './quit'
 import type { UpdateService } from './updates'
 import type { AiService } from './ai'
+import type { ReferenceService } from './references'
 import { installOllamaRuntime } from './ollama-runtime'
 
 export interface IpcServices {
@@ -36,6 +37,7 @@ export interface IpcServices {
   quit: QuitCoordinator
   updates: UpdateService
   ai: AiService
+  references: ReferenceService
   getWindow: () => BrowserWindow | null
 }
 
@@ -60,7 +62,8 @@ function asPort(value: unknown, fallback: number): number {
 }
 
 export function registerIpc(services: IpcServices): void {
-  const { store, catalog, sessions, debug, sftp, forwards, quit, updates, ai } = services
+  const { store, catalog, sessions, debug, sftp, forwards, quit, updates, ai, references } =
+    services
 
   const openDialog = (
     options: Electron.OpenDialogOptions
@@ -88,7 +91,8 @@ export function registerIpc(services: IpcServices): void {
       catalog: catalog.get(),
       debugSessions: debug.list(),
       aiKeyIds: store.getAiKeyIds(),
-      warnings: [...store.warnings]
+      referenceDocs: references.list(),
+      warnings: [...store.warnings, ...references.getWarnings()]
     }
   })
 
@@ -364,6 +368,38 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle('ai:cancel', (_event, requestId: string) => {
     if (requestId) ai.cancel(requestId)
   })
+
+  ipcMain.handle('references:list', () => references.list())
+  ipcMain.handle('references:import', async (_event, deviceTypeId?: string) => {
+    const result = await openDialog({
+      title: 'Add AI reference document',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Reference documents',
+          extensions: ['pdf', 'html', 'htm', 'md', 'markdown', 'txt', 'json', 'csv', 'log']
+        },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || !result.filePaths[0]) {
+      return { ok: false, canceled: true, docs: references.list() }
+    }
+    const imported = await references.import(
+      result.filePaths[0],
+      typeof deviceTypeId === 'string' ? deviceTypeId : undefined
+    )
+    return {
+      ok: !imported.error,
+      docs: imported.docs,
+      error: imported.error
+    }
+  })
+  ipcMain.handle('references:remove', (_event, id: string) =>
+    references.remove(requiredString(id, 'Reference id'))
+  )
+  ipcMain.handle('references:search', (_event, request) => references.search(request))
+  ipcMain.handle('references:open-folder', () => shell.openPath(references.getFolder()))
 
   ipcMain.handle('app:quit', (_event, action: QuitAction) => {
     quit.action(action)

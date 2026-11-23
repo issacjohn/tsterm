@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  BookOpen,
   Bot,
   Check,
   CircleStop,
@@ -274,6 +275,7 @@ export function AiChatPanel(): React.JSX.Element {
   const pane = useAppStore(activePane)
   const catalog = useAppStore((state) => state.catalog)
   const keyIds = useAppStore((state) => state.aiKeyIds)
+  const referenceDocs = useAppStore((state) => state.referenceDocs)
   const messages = useAppStore((state) => state.aiMessages)
   const draft = useAppStore((state) => state.aiDraft)
   const setMessages = useAppStore((state) => state.setAiMessages)
@@ -292,11 +294,15 @@ export function AiChatPanel(): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const type = catalog.types.find((item) => item.id === pane?.deviceTypeId)
+  const activeTypeId = pane?.deviceTypeId || pane?.session?.deviceType
+  const type = catalog.types.find((item) => item.id === activeTypeId)
   const profile =
     settings.aiProfiles.find((item) => item.id === settings.aiActiveProfileId) ??
     settings.aiProfiles[0]
   const sessionId = pane?.status === 'connected' ? pane.sessionId : undefined
+  const referenceCount = referenceDocs.filter(
+    (doc) => !doc.deviceTypeId || doc.deviceTypeId === activeTypeId
+  ).length
   const isLocal = Boolean(profile?.local && isLoopbackUrl(profile.baseUrl))
   const localState =
     isLocal &&
@@ -378,15 +384,35 @@ export function AiChatPanel(): React.JSX.Element {
     setError(null)
     setBusy(true)
     try {
+      let referenceHints: string[] = []
+      if (referenceCount > 0) {
+        try {
+          const references = await window.tsterm.references.search({
+            query: prompt,
+            deviceTypeId: activeTypeId,
+            limit: 6
+          })
+          if (references.ok) {
+            referenceHints = references.matches.map(
+              (match) => `### Reference: ${match.docName}\n${match.excerpt}`
+            )
+          }
+        } catch {
+          // Reference lookup is best-effort; never block the chat.
+        }
+      }
       const result = await window.tsterm.ai.chat({
         requestId,
         profileId: profile.id,
         messages: nextMessages.slice(-12),
         includeContext: settings.aiIncludeContext,
-        context: collectAiContext({
-          includeContext: settings.aiIncludeContext,
-          prompt
-        })
+        context: {
+          ...collectAiContext({
+            includeContext: settings.aiIncludeContext,
+            prompt
+          }),
+          referenceHints
+        }
       })
       if (result.ok) {
         setMessages([...nextMessages, { role: 'assistant', content: result.text }])
@@ -481,6 +507,15 @@ export function AiChatPanel(): React.JSX.Element {
           </div>
         </div>
         <div className="ai-topline-actions">
+          {referenceCount > 0 ? (
+            <button
+              className="ai-reference-chip"
+              onClick={() => setModal({ kind: 'settings', tab: 'ai' })}
+              title="Open the AI reference library"
+            >
+              <BookOpen size={11} /> {referenceCount}
+            </button>
+          ) : null}
           <button
             className={cx('ai-context-chip', contextOn && 'on')}
             onClick={toggleContext}
@@ -510,6 +545,15 @@ export function AiChatPanel(): React.JSX.Element {
         ) : (
           <span className="ai-target muted">no live prompt</span>
         )}
+      </div>
+
+      <div className={cx('ai-scope-line', !type && 'warn')}>
+        <BookOpen size={11} />
+        <span>
+          {type
+            ? `${type.name} runbooks only — other device packs are ignored.`
+            : 'No device type selected. Choose one in the session toolbar to scope the runbooks.'}
+        </span>
       </div>
 
       {profile && isSmallModelName(profile.model) ? (

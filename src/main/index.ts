@@ -11,6 +11,7 @@ import { ForwardManager } from './forwarding'
 import { QuitCoordinator } from './quit'
 import { UpdateService } from './updates'
 import { AiService } from './ai'
+import { ReferenceService } from './references'
 import { registerIpc, sendMenuCommand } from './ipc'
 
 app.setName('TSTerm')
@@ -29,6 +30,7 @@ let forwards: ForwardManager
 let quit: QuitCoordinator
 let updates: UpdateService
 let ai: AiService
+let references: ReferenceService
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -181,6 +183,7 @@ async function boot(): Promise<void> {
   forwards = new ForwardManager(sessions, (forward) => send('forward:changed', forward))
   updates = new UpdateService(store, app.getVersion())
   ai = new AiService(store)
+  references = new ReferenceService(store.paths.appData)
   quit = new QuitCoordinator(debug, sessions)
   registerIpc({
     store,
@@ -192,6 +195,7 @@ async function boot(): Promise<void> {
     quit,
     updates,
     ai,
+    references,
     getWindow: () => mainWindow
   })
   buildMenu()

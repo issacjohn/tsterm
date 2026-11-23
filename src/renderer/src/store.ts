@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS } from '@shared/themes'
 import type {
   AiChatMessage,
+  AiReferenceDoc,
   AppSettings,
   Bootstrap,
   CatalogBundle,
@@ -115,6 +116,7 @@ export interface AppStore {
   catalog: CatalogBundle
   debugSessions: DebugSession[]
   aiKeyIds: string[]
+  referenceDocs: AiReferenceDoc[]
   aiMessages: AiChatMessage[]
   aiDraft: string
   troubleshootTab: TroubleshootTab
@@ -135,6 +137,7 @@ export interface AppStore {
   setCatalog: (catalog: CatalogBundle) => void
   setDebugSessions: (sessions: DebugSession[]) => void
   setAiKeyIds: (keyIds: string[]) => void
+  setReferenceDocs: (docs: AiReferenceDoc[]) => void
   setAiMessages: (messages: AiChatMessage[]) => void
   setAiDraft: (draft: string) => void
   clearAiChat: () => void
@@ -179,6 +182,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   catalog: { types: [], issues: [], loadedAt: new Date().toISOString() },
   debugSessions: [],
   aiKeyIds: [],
+  referenceDocs: [],
   aiMessages: [],
   aiDraft: '',
   troubleshootTab: 'runbooks',
@@ -202,6 +206,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       catalog: bootstrap.catalog,
       debugSessions: bootstrap.debugSessions,
       aiKeyIds: bootstrap.aiKeyIds,
+      referenceDocs: bootstrap.referenceDocs ?? [],
       showSidebar: bootstrap.settings.showSidebar,
       showTroubleshoot: bootstrap.settings.showTroubleshootPanel,
       appPlatform: bootstrap.platform
@@ -218,6 +223,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setCatalog: (catalog) => set({ catalog }),
   setDebugSessions: (debugSessions) => set({ debugSessions }),
   setAiKeyIds: (aiKeyIds) => set({ aiKeyIds }),
+  setReferenceDocs: (referenceDocs) => set({ referenceDocs }),
   setAiMessages: (aiMessages) => set({ aiMessages }),
   setAiDraft: (aiDraft) => set({ aiDraft }),
   clearAiChat: () => set({ aiMessages: [], aiDraft: '' }),

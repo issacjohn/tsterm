@@ -22,6 +22,8 @@ This covers:
   validation.
 - Automatic Ollama runtime installation: winget success, installer failure, non-Windows fallback, tray-app
   start, and clear manual instructions.
+- Reference library import, text/PDF extraction, device-type scoping, duplicate detection, retrieval, and
+  removal.
 - The Electron main/preload/renderer type boundaries.
 
 ## Unit tests
@@ -97,6 +99,18 @@ and `/api/pull` endpoints plus the OpenAI-compatible chat endpoint. It verifies:
 
 Screenshots `24-ai-model-download.png` through `26-ai-auto-pulled-chat.png` are written to `screenshots/`.
 No real Ollama process or multi-gigabyte download is involved.
+
+## AI reference and scope test
+
+`npm run test:ai-reference` presets an ASA-scoped reference document, switches the active local session
+to **Cisco ASA**, and sends a question through a mock provider. It verifies:
+
+- The Assistant scope line says **Cisco ASA runbooks only**.
+- The reference chip shows the imported document.
+- Only the relevant ASA reference excerpt is included in the system prompt.
+- Windows commands and Windows runbooks do not leak into the ASA-scoped prompt.
+
+Screenshot `30-ai-reference-scope.png` is written.
 
 ## Missing-runtime UI test
 

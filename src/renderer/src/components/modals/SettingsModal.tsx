@@ -27,7 +27,13 @@ import {
   Wifi,
   X
 } from 'lucide-react'
-import type { AiProfile, AppSettings, AppThemeId, TerminalTheme } from '@shared/types'
+import type {
+  AiProfile,
+  AiReferenceDoc,
+  AppSettings,
+  AppThemeId,
+  TerminalTheme
+} from '@shared/types'
 import { getTerminalTheme, TERMINAL_THEMES } from '@shared/themes'
 import { isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
 import { useAppStore, type SettingsTab } from '../../store'
@@ -391,9 +397,11 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
   const knownHosts = useAppStore((state) => state.knownHosts)
   const debugSessions = useAppStore((state) => state.debugSessions)
   const aiKeyIds = useAppStore((state) => state.aiKeyIds)
+  const referenceDocs = useAppStore((state) => state.referenceDocs)
   const setCatalog = useAppStore((state) => state.setCatalog)
   const setHosts = useAppStore((state) => state.setHosts)
   const setAiKeyIds = useAppStore((state) => state.setAiKeyIds)
+  const setReferenceDocs = useAppStore((state) => state.setReferenceDocs)
   const setModal = useAppStore((state) => state.setModal)
   const notify = useAppStore((state) => state.notify)
   const [activeTab, setActiveTab] = useState<SettingsTab>(tab)
@@ -407,6 +415,9 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
   const [models, setModels] = useState<string[]>([])
   const [modelBusy, setModelBusy] = useState(false)
   const [modelError, setModelError] = useState<string | null>(null)
+  const [referenceScope, setReferenceScope] = useState('')
+  const [referenceBusy, setReferenceBusy] = useState(false)
+  const [referenceError, setReferenceError] = useState<string | null>(null)
   const theme = getTerminalTheme(settings)
   const localModel = useLocalModelState()
 
@@ -576,6 +587,45 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
     } finally {
       setModelBusy(false)
     }
+  }
+
+  const importReference = async (): Promise<void> => {
+    setReferenceBusy(true)
+    setReferenceError(null)
+    try {
+      const result = await window.tsterm.references.import(referenceScope || undefined)
+      setReferenceDocs(result.docs)
+      if (result.error) {
+        setReferenceError(result.error)
+        notify({ kind: 'error', title: 'Reference document not imported', message: result.error })
+      } else if (!result.canceled) {
+        notify({
+          kind: 'success',
+          title: 'Reference document imported',
+          message: 'TSTerm will retrieve relevant sections for future questions.'
+        })
+      }
+    } catch (error) {
+      setReferenceError((error as Error).message)
+    } finally {
+      setReferenceBusy(false)
+    }
+  }
+
+  const removeReference = async (doc: AiReferenceDoc): Promise<void> => {
+    if (!window.confirm(`Remove the reference document "${doc.name}"?`)) return
+    try {
+      const docs = await window.tsterm.references.remove(doc.id)
+      setReferenceDocs(docs)
+      notify({ kind: 'info', title: 'Reference document removed' })
+    } catch (error) {
+      notify({ kind: 'error', title: 'Could not remove document', message: (error as Error).message })
+    }
+  }
+
+  const referenceScopeLabel = (deviceTypeId?: string): string => {
+    if (!deviceTypeId) return 'All devices'
+    return catalog.types.find((type) => type.id === deviceTypeId)?.name ?? deviceTypeId
   }
 
   const navItems: Array<{ id: SettingsTab; label: string; icon: typeof Palette }> = [
@@ -1328,6 +1378,84 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                       </div>
                     </div>
                   ) : null}
+
+                  <div className="settings-subhead">
+                    <h4>Reference library</h4>
+                    <span>{referenceDocs.length} documents</span>
+                  </div>
+                  <div className="ai-reference-intro">
+                    <BookOpen size={14} />
+                    <p>
+                      Import a vendor command reference or troubleshooting guide. TSTerm searches it locally
+                      and sends only the most relevant excerpts with each question. Scope a document to one
+                      device type so it is used only for that platform.
+                    </p>
+                  </div>
+                  <div className="ai-reference-toolbar">
+                    <select
+                      value={referenceScope}
+                      onChange={(event) => setReferenceScope(event.target.value)}
+                      aria-label="Reference document device scope"
+                    >
+                      <option value="">All devices</option>
+                      {catalog.types.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => void importReference()}
+                      disabled={referenceBusy}
+                    >
+                      {referenceBusy ? (
+                        <Loader2 size={13} className="spin" />
+                      ) : (
+                        <Upload size={13} />
+                      )}
+                      {referenceBusy ? 'Reading…' : 'Add document'}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void window.tsterm.references.openFolder()}
+                    >
+                      <FolderOpen size={13} /> Open folder
+                    </button>
+                  </div>
+                  {referenceError ? <div className="ai-inline-error">{referenceError}</div> : null}
+                  {referenceDocs.length ? (
+                    <div className="ai-reference-list">
+                      {referenceDocs.map((doc) => (
+                        <div className="ai-reference-row" key={doc.id}>
+                          <BookOpen size={13} />
+                          <div>
+                            <strong>{doc.name}</strong>
+                            <span>
+                              {referenceScopeLabel(doc.deviceTypeId)} · {doc.chunks} sections ·{' '}
+                              {Math.max(1, Math.round(doc.chars / 1000))}k chars
+                            </span>
+                          </div>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => void removeReference(doc)}
+                            title="Remove this reference document"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="ai-reference-empty">
+                      No documents yet. PDF, HTML, Markdown, text, JSON, and CSV are supported.
+                    </div>
+                  )}
+                  <span className="setting-description">
+                    PDFs must contain selectable text; scanned images need OCR first. Documents stay in this
+                    computer's app data. When AI is enabled, relevant excerpts may be sent to the configured
+                    provider.
+                  </span>
 
                   <div className="settings-note-card">
                     <Database size={15} />

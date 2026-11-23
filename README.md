@@ -80,9 +80,24 @@ and a cancel button. The download continues if you close Settings, and can be tu
 **Download local models automatically**.
 
 Responses stream token by token, so answers appear while the model is still writing. **Qwen2.5 7B** is the
-recommended local model for network CLI work; 1B–3B models are faster but often give generic answers, and
-TSTerm warns when one is selected. Device type, matching runbooks, and a catalog index are always sent to
-the model; live terminal lines remain opt-in.
+recommended local model for network CLI work; 1B–3B models are often generic, and TSTerm warns when one is
+selected. Device type and matching runbooks are always sent to the model; live terminal lines remain
+opt-in.
+
+The AI is **scoped to the active device pack**. An ASA session receives ASA runbooks only; a Windows
+terminal receives Windows runbooks only. Other packs are excluded from the prompt.
+
+### Reference library
+
+![AI scope and imported reference](screenshots/30-ai-reference-scope.png)
+
+Import command references or vendor guides in **Settings → AI assistant → Reference library**. PDF, HTML,
+Markdown, text, JSON, CSV, and log files are supported. Each document can be scoped to one device type or
+all devices.
+
+TSTerm keeps the document locally, splits it into sections, and retrieves only the most relevant excerpts
+for each question. The excerpt and its document name are added to the AI prompt as reference data. PDFs
+must contain selectable text; scanned images need OCR first.
 
 If Ollama itself is missing, **Install Ollama** runs the official `Ollama.Ollama` winget package on
 Windows and then continues with the model download. On macOS and Linux, TSTerm opens the official download
@@ -306,6 +321,9 @@ npm run test:ai-local
 # Checks the missing-runtime UI offers Install Ollama instead of a misleading Download button
 npm run test:ai-runtime
 
+# Verifies ASA-only runbook scope and imported reference retrieval
+npm run test:ai-reference
+
 # Requires Ollama plus qwen2.5:7b; sends a real streaming prompt through TSTerm
 npm run test:ai-ollama
 
@@ -351,6 +369,8 @@ Think before you paste. The catalog is a knowledgeable assistant, not a substitu
   cloud sync.
 - The AI assistant is disabled by default. When enabled, it only talks to the provider you configure and
   only when you send a message. It cannot execute commands; fills never include Enter.
+- Imported reference documents are stored in the local app data folder. Only the excerpts selected for a
+  question are included in the AI request. Scanned PDFs are not OCRed.
 - Session logs and exports are local files. Treat them as sensitive.
 - Custom device packs run with the same privileges as the app. Only import packs you trust.
 

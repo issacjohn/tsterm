@@ -388,7 +388,42 @@ export interface AiChatContext {
   terminalTail?: string
   currentCommand?: string
   runbookHints?: string[]
+  referenceHints?: string[]
 }
+
+export interface AiReferenceDoc {
+  id: string
+  name: string
+  fileName: string
+  deviceTypeId?: string
+  chars: number
+  chunks: number
+  addedAt: string
+}
+
+export interface AiReferenceImportResult {
+  ok: boolean
+  canceled?: boolean
+  docs: AiReferenceDoc[]
+  error?: string
+}
+
+export interface AiReferenceSearchRequest {
+  query: string
+  deviceTypeId?: string
+  limit?: number
+}
+
+export interface AiReferenceMatch {
+  docId: string
+  docName: string
+  excerpt: string
+  score: number
+}
+
+export type AiReferenceSearchResult =
+  | { ok: true; matches: AiReferenceMatch[] }
+  | { ok: false; error: string }
 
 export interface AiChatRequest {
   requestId: string
@@ -620,6 +655,7 @@ export interface Bootstrap {
   catalog: CatalogBundle
   debugSessions: DebugSession[]
   aiKeyIds: string[]
+  referenceDocs: AiReferenceDoc[]
   warnings?: string[]
 }
 
@@ -726,5 +762,12 @@ export interface TstermApi {
     deleteKey(profileId: string): Promise<string[]>
     keyIds(): Promise<string[]>
     cancel(requestId: string): Promise<void>
+  }
+  references: {
+    list(): Promise<AiReferenceDoc[]>
+    import(deviceTypeId?: string): Promise<AiReferenceImportResult>
+    remove(id: string): Promise<AiReferenceDoc[]>
+    search(request: AiReferenceSearchRequest): Promise<AiReferenceSearchResult>
+    openFolder(): Promise<void>
   }
 }

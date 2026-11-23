@@ -7,6 +7,7 @@ import type {
   AiModelsRequest,
   AiPullModelRequest,
   AiPullProgressEvent,
+  AiReferenceSearchRequest,
   AppSettings,
   Bootstrap,
   ChooseFileOptions,
@@ -129,6 +130,13 @@ const api: TstermApi = {
     deleteKey: (profileId: string) => ipcRenderer.invoke('ai:delete-key', profileId),
     keyIds: () => ipcRenderer.invoke('ai:key-ids'),
     cancel: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId)
+  },
+  references: {
+    list: () => ipcRenderer.invoke('references:list'),
+    import: (deviceTypeId?: string) => ipcRenderer.invoke('references:import', deviceTypeId),
+    remove: (id: string) => ipcRenderer.invoke('references:remove', id),
+    search: (request: AiReferenceSearchRequest) => ipcRenderer.invoke('references:search', request),
+    openFolder: () => ipcRenderer.invoke('references:open-folder')
   }
 }
 

@@ -86,14 +86,10 @@ export function buildRunbookHints(type: DeviceType | undefined, query: string): 
       .map(({ workflow }) => describeWorkflow(workflow).slice(0, 1600))
     if (hits.length < 3) {
       const categories = type.categories.map((category) => category.name).join(' · ')
-      const titles = type.workflows
-        .slice(0, 90)
-        .map((workflow) => `- ${workflow.title}`)
-        .join('\n')
       hints.push(
-        `### TSTerm catalog coverage\nCategories: ${categories}\nRunbook titles:\n${titles}`.slice(
+        `### TSTerm catalog categories for ${type.name}\n${categories}\nOnly use runbooks from ${type.name}; ask a clarifying question if the symptom does not fit one of these categories.`.slice(
           0,
-          4000
+          1200
         )
       )
     }
@@ -111,7 +107,8 @@ export interface AiContextOptions {
 export function collectAiContext(options: AiContextOptions): AiChatContext {
   const state = useAppStore.getState()
   const pane = activePane(state)
-  const type = state.catalog.types.find((item) => item.id === pane?.deviceTypeId)
+  const typeId = pane?.deviceTypeId || pane?.session?.deviceType
+  const type = state.catalog.types.find((item) => item.id === typeId)
   const host = state.hosts.find((item) => item.id === pane?.hostId)
   const snapshot = options.includeContext ? readTerminalSnapshot(pane?.sessionId) : {}
 
