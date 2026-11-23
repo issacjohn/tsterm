@@ -1,5 +1,6 @@
 import type { AiChatContext, Snippet } from '@shared/types'
 import {
+  buildRetrievalQuery,
   promptInputText,
   sanitizeTerminalText,
   stripPromptPrefix,
@@ -12,6 +13,7 @@ import { terminalRegistry } from './terminal-registry'
 
 export {
   analyzeAiCommands,
+  buildRetrievalQuery,
   extractCommands,
   extractInlineCommands,
   looksLikeCommand,
@@ -67,6 +69,11 @@ export function collectAiContext(options: AiContextOptions): AiChatContext {
   const type = state.catalog.types.find((item) => item.id === typeId)
   const host = state.hosts.find((item) => item.id === pane?.hostId)
   const snapshot = options.includeContext ? readTerminalSnapshot(pane?.sessionId) : {}
+  const retrievalQuery = buildRetrievalQuery(
+    options.prompt,
+    options.includeContext ? snapshot.tail : undefined,
+    options.includeContext ? snapshot.currentCommand : undefined
+  )
 
   return {
     deviceTypeName: type?.name,
@@ -78,7 +85,7 @@ export function collectAiContext(options: AiContextOptions): AiChatContext {
     deviceNotes: type?.notes.slice(0, 10),
     terminalTail: options.includeContext ? snapshot.tail : undefined,
     currentCommand: options.includeContext ? snapshot.currentCommand : undefined,
-    runbookHints: buildRunbookHints(type, options.prompt)
+    runbookHints: buildRunbookHints(type, retrievalQuery)
   }
 }
 

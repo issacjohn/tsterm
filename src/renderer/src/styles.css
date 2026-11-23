@@ -8953,3 +8953,7 @@ input[type="range"] {
   font-size: 9px;
   word-break: break-word;
 }
+
+.cmd-preview-state.reference {
+  color: var(--info);
+}

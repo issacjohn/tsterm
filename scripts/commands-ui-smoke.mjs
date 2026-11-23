@@ -78,6 +78,27 @@ try {
   const readOnlyRisks = await page.locator('.cmd-result .cmd-risk').allInnerTexts()
   await page.screenshot({ path: path.join(shots, 'commands-02-readonly.png'), animations: 'disabled' })
 
+  await page.locator('.cmd-filter', { hasText: 'All' }).click()
+  await page.locator('.cmd-search input').fill('aaa accounting command')
+  const referenceCard = page
+    .locator('.cmd-result')
+    .filter({ hasText: 'aaa accounting command' })
+    .filter({ hasText: 'reference' })
+    .first()
+  await referenceCard.waitFor({ timeout: 15000 })
+  await referenceCard.click()
+  await page.waitForSelector('.cmd-preview-head')
+  await page.waitForTimeout(300)
+  const reference = {
+    count: await page.locator('.cmd-result').filter({ hasText: 'reference' }).count(),
+    syntaxLabel: (await page.locator('.cmd-preview-head span').first().innerText()).trim(),
+    syntax: (await page.locator('.cmd-preview > code').innerText()).trim(),
+    note: (await page.locator('.cmd-detail').innerText()).includes("Reference entry from Cisco's ASA"),
+    fillDisabled: await page.locator('.cmd-actions button', { hasText: 'Fill' }).isDisabled(),
+    ciscoDoc: await page.locator('.cmd-actions button', { hasText: 'Cisco doc' }).count()
+  }
+  await page.screenshot({ path: path.join(shots, 'commands-05-reference.png'), animations: 'disabled' })
+
   let vectorBuild = null
   if (process.env.TSTERM_BUILD_VECTORS === '1') {
     await page.getByRole('button', { name: /Build vector index/ }).click()
@@ -101,9 +122,10 @@ try {
         topResults,
         preview,
         hasFill: detailText.includes('Fill'),
-        hasNeverEnter: detailText.includes('Never presses Enter') || detailText.includes('Enter first'),
+        hasNeverEnter: /never presses enter/i.test(detailText) || /enter .* first/i.test(detailText),
         footer,
         vectorBuild,
+        reference,
         readOnlyRisks: [...new Set(readOnlyRisks.map((text) => text.trim()))],
         errors
       },

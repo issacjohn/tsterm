@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  ArrowUpRight,
   Check,
   ChevronRight,
   Copy,
@@ -202,7 +203,15 @@ export function CommandBrowserModal(): React.JSX.Element | null {
     selected?.id.startsWith('asa.cmd.') &&
       !COMPLETE_TOP_LEVEL.has(selected.commandTemplate.trim().toLowerCase())
   )
-  const canFill = Boolean(rendered?.ok && selected && destructiveArmed && sessionId && !topLevelOnly)
+  const isReference = Boolean(selected?.referenceOnly)
+  const canFill = Boolean(
+    rendered?.ok &&
+      selected &&
+      destructiveArmed &&
+      sessionId &&
+      !topLevelOnly &&
+      !isReference
+  )
   const canRoute = Boolean(settings.aiEnabled && profile?.model && !routing)
 
   const selectRecord = (record: AsaCommandRecord, seed?: Record<string, string>): void => {
@@ -236,8 +245,9 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   }
 
   const copy = async (): Promise<void> => {
-    if (!rendered?.ok) return
-    await window.tsterm.app.copyText(rendered.command ?? '')
+    const text = isReference ? selected?.syntax : rendered?.command
+    if (!text) return
+    await window.tsterm.app.copyText(text)
     notify({ kind: 'success', title: 'Copied', message: 'Review the command before running it.' })
   }
 
@@ -296,9 +306,9 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   const buildIndex = async (): Promise<void> => {
     setBuilding(true)
     setError(null)
-    setProgress({ phase: 'embedding', done: 0, total: status?.total ?? 0 })
+    setProgress({ phase: 'checking', done: 0, total: status?.vectorTargetCount ?? 0 })
     try {
-      const next = await window.tsterm.commands.buildIndex(profile?.id)
+      const next = await window.tsterm.commands.ensureIndex(profile?.id)
       setStatus(next)
       if (next.vectorError) {
         notify({ kind: 'error', title: 'Vector index failed', message: next.vectorError })
@@ -320,7 +330,11 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   if (!browser) return null
 
   const progressPercent =
-    progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+    progress?.percent !== undefined
+      ? progress.percent
+      : progress && progress.total > 0
+        ? Math.round((progress.done / progress.total) * 100)
+        : 0
   const vectorReady = Boolean(status?.vectorReady)
   const routeLowConfidence = route?.ok && route.confidence === 'low'
   const sortedRecords = [...records].sort((a, b) => {
@@ -343,7 +357,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
           <div className="cmd-footer-status">
             <span className={cx('cmd-index-dot', vectorReady ? 'ready' : 'bm25')} />
             {vectorReady
-              ? `Hybrid · ${status?.vectorCount ?? 0} embedded`
+              ? `Hybrid · ${status?.vectorCount ?? 0}/${status?.vectorTargetCount ?? 0} curated embedded`
               : `BM25 only · ${status?.total ?? 0} commands`}
             {status?.vectorModel ? <em>{status.vectorModel}</em> : null}
           </div>
@@ -418,7 +432,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 vectorReady ? ` · ${result.vectorReady ? 'hybrid' : 'BM25'}`
                   : ''
               }`
-            : `Type to search ${status?.total ?? 503} curated ASA records`}
+            : `Type to search ${status?.total ?? 3013} ASA command records`}
         </div>
       </div>
 
@@ -427,11 +441,17 @@ export function CommandBrowserModal(): React.JSX.Element | null {
           <div className="cmd-index-progress-head">
             <Layers size={12} />
             <span>
-              {progress?.phase === 'saving'
-                ? 'Saving the local vector index…'
-                : progress?.phase === 'done'
-                  ? 'Vector index ready'
-                  : `Embedding ${progress?.done ?? 0} of ${progress?.total ?? 0} commands`}
+              {progress?.phase === 'checking'
+                ? 'Checking the local embedding model…'
+                : progress?.phase === 'pulling'
+                  ? progress.status || 'Downloading the embedding model…'
+                  : progress?.phase === 'saving'
+                    ? 'Saving the local vector index…'
+                    : progress?.phase === 'done'
+                      ? 'Vector index ready'
+                      : progress?.phase === 'error'
+                        ? progress.error || 'Vector index failed'
+                        : `Embedding ${progress?.done ?? 0} of ${progress?.total ?? 0} commands`}
             </span>
             <em>{progressPercent}%</em>
           </div>
@@ -528,8 +548,8 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 or an exact token like <code>%ASA-4-106023</code>.
               </p>
               <span>
-                {status?.total ?? 503} records: top-level commands, runbook steps, and complete
-                examples.
+                {status?.total ?? 3013} records: fillable runbooks, complete examples, and the Cisco
+                documentation reference.
               </span>
             </div>
           ) : searching && !result ? (
@@ -569,6 +589,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                     <span>{record.mode}</span>
                     <span>{sourceLabel(record.source)}</span>
                     {isAiPick ? <span className="cmd-ai-tag">AI pick</span> : null}
+                    {record.referenceOnly ? <span>reference</span> : null}
                     {match?.via ? <span>{match.via}</span> : null}
                     <em>
                       #{index + 1}
@@ -620,6 +641,17 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 </span>
               </div>
 
+              {isReference ? (
+                <div className="cmd-note">
+                  <Info size={13} />
+                  <span>
+                    Reference entry from Cisco's ASA command reference. The syntax is documented,
+                    but this command is not parameterized for safe Fill. Use Copy or open the Cisco
+                    page.
+                  </span>
+                </div>
+              ) : null}
+
               <div className={cx('cmd-note', riskClass(selected.risk))}>
                 {selected.risk === 'read_only' ? <ShieldCheck size={13} /> : <AlertTriangle size={13} />}
                 <span>
@@ -656,9 +688,16 @@ export function CommandBrowserModal(): React.JSX.Element | null {
 
               <div className="cmd-preview">
                 <div className="cmd-preview-head">
-                  <span>Rendered preview</span>
-                  <span className={cx('cmd-preview-state', rendered?.ok ? 'ok' : 'missing')}>
-                    {rendered?.ok ? (
+                  <span>{isReference ? 'Documented syntax' : 'Rendered preview'}</span>
+                  <span
+                    className={cx(
+                      'cmd-preview-state',
+                      isReference ? 'reference' : rendered?.ok ? 'ok' : 'missing'
+                    )}
+                  >
+                    {isReference ? (
+                      'reference'
+                    ) : rendered?.ok ? (
                       <>
                         <Check size={11} /> valid
                       </>
@@ -668,11 +707,20 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                   </span>
                 </div>
                 <code>
-                  {selected ? previewCommand(selected, effectiveValues) : ''}
+                  {isReference
+                    ? selected.syntax || selected.commandTemplate
+                    : selected
+                      ? previewCommand(selected, effectiveValues)
+                      : ''}
                 </code>
               </div>
 
-              {selected.parameters.length ? (
+              {isReference ? (
+                <div className="cmd-no-params">
+                  <Info size={12} /> Parameters are documented in Cisco's syntax above. This entry is
+                  not parameterized for Fill.
+                </div>
+              ) : selected.parameters.length ? (
                 <div className="cmd-params">
                   <div className="cmd-params-head">
                     <span>Parameters</span>
@@ -749,25 +797,35 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => void copy()}
-                  disabled={!rendered?.ok}
+                  disabled={!isReference && !rendered?.ok}
                 >
                   <Copy size={13} /> Copy
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => void saveSnippet()}
-                  disabled={!rendered?.ok || topLevelOnly}
+                  disabled={!rendered?.ok || topLevelOnly || isReference}
                 >
                   <Sparkles size={13} /> Snippet
                 </button>
+                {isReference && selected.url ? (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void window.tsterm.app.openExternal(selected.url ?? '')}
+                  >
+                    <ArrowUpRight size={13} /> Cisco doc
+                  </button>
+                ) : null}
                 <span className="cmd-actions-hint">
-                  {topLevelOnly
-                    ? 'This top-level record is incomplete. Add the subcommand or choose a runbook step.'
-                    : !sessionId
-                      ? 'Fill writes one line and never presses Enter. Connect a session first.'
-                      : !rendered?.ok
-                        ? `Enter ${missing.join(', ')} first.`
-                        : 'Writes one line. Never presses Enter.'}
+                  {isReference
+                    ? 'Reference only — Copy the syntax or open the Cisco doc. Fill is disabled.'
+                    : topLevelOnly
+                      ? 'This top-level record is incomplete. Add the subcommand or choose a runbook step.'
+                      : !sessionId
+                        ? 'Fill writes one line and never presses Enter. Connect a session first.'
+                        : !rendered?.ok
+                          ? `Enter ${missing.join(', ')} first.`
+                          : 'Writes one line. Never presses Enter.'}
                 </span>
               </div>
             </>

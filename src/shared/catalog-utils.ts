@@ -47,16 +47,41 @@ export interface SearchHit {
   score: number
 }
 
-const STOP_WORDS = new Set(['the', 'a', 'an', 'to', 'for', 'and', 'of', 'in', 'on', 'with', 'all'])
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'to', 'for', 'and', 'of', 'in', 'on', 'with', 'all',
+  'how', 'what', 'when', 'where', 'why', 'who', 'which', 'is', 'are', 'was', 'were',
+  'be', 'been', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 'will',
+  'my', 'our', 'we', 'i', 'you', 'it', 'this', 'that', 'these', 'those',
+  'please', 'help', 'issue', 'problem', 'trouble', 'troubleshooting',
+  'not', 'no', 'yes', 'get', 'getting'
+])
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_./-]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function stem(token: string): string {
+  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`
+  if (token.length > 4 && /(ches|shes|xes|ses)$/.test(token)) return token.slice(0, -2)
+  if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3)
+  if (token.length > 4 && token.endsWith('ed')) return token.slice(0, -2)
+  if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1)
+  return token
+}
+
+function normalizeSearch(value: string): string {
+  return normalize(value)
+    .split(' ')
+    .filter(Boolean)
+    .map(stem)
+    .join(' ')
 }
 
 function queryTokens(query: string): string[] {
   return normalize(query)
     .split(' ')
     .filter((token) => token && !STOP_WORDS.has(token))
+    .map(stem)
 }
 
 function boundaryIncludes(haystack: string, token: string): boolean {
@@ -87,14 +112,14 @@ function workflowSearchBlob(workflow: Workflow, category: Category): {
     .map((variable) => `${variable.name} ${variable.prompt} ${variable.help ?? ''}`)
     .join(' ')
   return {
-    title: normalize(`${workflow.title} ${workflow.id.replace(/-/g, ' ')}`),
-    keywords: normalize(workflow.keywords.join(' ')),
-    summary: normalize(workflow.summary),
-    category: normalize(`${category.name} ${category.description ?? ''}`),
-    commands: normalize(commands),
-    variables: normalize(variables),
-    notes: normalize([...workflow.notes, ...workflow.requires].join(' ')),
-    tags: normalize(workflow.tags.join(' '))
+    title: normalizeSearch(`${workflow.title} ${workflow.id.replace(/-/g, ' ')}`),
+    keywords: normalizeSearch(workflow.keywords.join(' ')),
+    summary: normalizeSearch(workflow.summary),
+    category: normalizeSearch(`${category.name} ${category.description ?? ''}`),
+    commands: normalizeSearch(commands),
+    variables: normalizeSearch(variables),
+    notes: normalizeSearch([...workflow.notes, ...workflow.requires].join(' ')),
+    tags: normalizeSearch(workflow.tags.join(' '))
   }
 }
 
@@ -116,27 +141,43 @@ function scoreMatch(
   return score
 }
 
-export function searchWorkflows(type: DeviceType, query: string): SearchHit[] {
+export interface SearchOptions {
+  partial?: boolean
+  minCoverage?: number
+}
+
+export function searchWorkflows(
+  type: DeviceType,
+  query: string,
+  options: SearchOptions = {}
+): SearchHit[] {
   const items = allWorkflows(type)
   const tokens = queryTokens(query)
   if (tokens.length === 0) {
     return items.map(({ workflow, category }) => ({ workflow, category, score: 0 }))
   }
-  const phrase = normalize(query)
+  const phrase = normalizeSearch(query)
   const hits: SearchHit[] = []
   for (const { workflow, category } of items) {
     const blob = workflowSearchBlob(workflow, category)
     let score = 0
-    let matchedAll = true
+    let matched = 0
     for (const token of tokens) {
       const tokenScore = scoreMatch(blob, token)
-      if (tokenScore === 0) {
-        matchedAll = false
-        break
+      if (tokenScore > 0) {
+        matched += 1
+        score += tokenScore
       }
-      score += tokenScore
     }
-    if (!matchedAll) continue
+    if (matched === 0) continue
+    if (!options.partial) {
+      if (matched !== tokens.length) continue
+    } else {
+      const coverage = matched / tokens.length
+      const minimum = options.minCoverage ?? (tokens.length <= 2 ? 0.5 : 0.25)
+      if (coverage < minimum) continue
+      score += coverage * 60
+    }
     if (blob.title.includes(phrase)) score += 80
     if (workflow.id === phrase.replace(/\s+/g, '-')) score += 60
     hits.push({ workflow, category, score })

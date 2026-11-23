@@ -43,7 +43,7 @@ export function buildRunbookHints(type: DeviceType | undefined, query: string): 
   try {
     let workflows: Workflow[] = []
     for (const candidate of hintQueries(query)) {
-      const hits = searchWorkflows(type, candidate)
+      const hits = searchWorkflows(type, candidate, { partial: true, minCoverage: 0.25 })
       if (hits.length) {
         workflows = hits.slice(0, MAX_HINTS).map(({ workflow }) => workflow)
         break

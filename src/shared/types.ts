@@ -390,6 +390,7 @@ export interface AiChatContext {
   currentCommand?: string
   runbookHints?: string[]
   referenceHints?: string[]
+  commandHints?: string[]
 }
 
 export type CommandRisk = 'read_only' | 'diagnostic' | 'mutating' | 'destructive'
@@ -418,6 +419,11 @@ export interface AsaCommandRecord {
   cleanup: string[]
   source: 'asa-help' | 'runbook' | 'cisco-docs' | 'device-help'
   version: string
+  syntax?: string
+  modes?: string[]
+  url?: string
+  book?: string
+  referenceOnly?: boolean
 }
 
 export interface CommandSearchRequest {
@@ -426,6 +432,7 @@ export interface CommandSearchRequest {
   risk?: CommandRisk
   mode?: string
   useVector?: boolean
+  includeReference?: boolean
 }
 
 export interface CommandSearchMatch {
@@ -450,14 +457,17 @@ export interface CommandStatusResult {
   vectorReady: boolean
   vectorModel: string
   vectorCount: number
+  vectorTargetCount: number
   indexing: boolean
   vectorError?: string
 }
 
 export interface CommandIndexProgress {
-  phase: 'embedding' | 'saving' | 'done' | 'error'
+  phase: 'checking' | 'pulling' | 'embedding' | 'saving' | 'done' | 'error'
   done: number
   total: number
+  percent?: number
+  status?: string
   error?: string
 }
 
@@ -874,6 +884,7 @@ export interface TstermApi {
     reload(): Promise<CommandStatusResult>
     search(request: CommandSearchRequest): Promise<CommandSearchResult>
     buildIndex(profileId?: string): Promise<CommandStatusResult>
+    ensureIndex(profileId?: string): Promise<CommandStatusResult>
     route(request: CommandRouteRequest): Promise<CommandRouteResult>
     onIndexProgress(callback: (progress: CommandIndexProgress) => void): Unsubscribe
   }

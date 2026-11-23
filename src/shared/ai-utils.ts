@@ -94,6 +94,90 @@ export function sanitizeTerminalText(input: string): string {
   return output.join('\n')
 }
 
+const SYSLOG_ID = /%ASA-\d-\d+/gi
+const TERMINAL_PROMPT_LINE =
+  /^\s*[A-Za-z0-9_.@:/~-]{1,96}(?:\([^)]+\))?[>#]\s+(.+)$/
+
+/**
+ * Retrieval query for follow-up turns. The user may only say "why did that
+ * fail?", so include syslog IDs and the last prompt line from the terminal.
+ * This text is used for local catalog/reference search only; the terminal
+ * output itself is still sent separately as untrusted data.
+ */
+export function buildRetrievalQuery(
+  prompt: string,
+  terminalTail?: string,
+  currentCommand?: string
+): string {
+  const parts: string[] = []
+  const cleanPrompt = prompt.trim()
+  if (cleanPrompt) parts.push(cleanPrompt)
+  const tail = terminalTail ?? ''
+  const syslogs = [...new Set(tail.match(SYSLOG_ID) ?? [])].slice(0, 4)
+  if (syslogs.length) parts.push(syslogs.join(' '))
+  let lastCommand = ''
+  for (const line of tail.split(/\r?\n/)) {
+    const match = line.match(TERMINAL_PROMPT_LINE)
+    if (match?.[1]) lastCommand = match[1].trim()
+  }
+  const command = (currentCommand ?? '').trim() || lastCommand
+  if (command && command.length <= 240 && !parts.includes(command)) parts.push(command)
+  return parts.join('\n').slice(0, 1800)
+}
+
+export function stripThinkTags(text: string): string {
+  return text
+    .replace(/<think(?:ing)?\b[^>]*>[\s\S]*?<\/think(?:ing)?>/gi, '')
+    .replace(/<think(?:ing)?\b[^>]*>[\s\S]*$/gi, '')
+    .replace(/<\/think(?:ing)?>/gi, '')
+    .trim()
+}
+
+/** Removes streaming ` thinking` blocks even when a tag is split across chunks. */
+export class ThinkTagFilter {
+  private buffer = ''
+  private inThink = false
+
+  push(chunk: string): string {
+    this.buffer += chunk
+    let output = ''
+    while (this.buffer) {
+      if (this.inThink) {
+        const end = this.buffer.search(/<\/think(?:ing)?>/i)
+        if (end === -1) {
+          // Keep a small tail in case the closing tag is split across chunks.
+          if (this.buffer.length > 24) this.buffer = this.buffer.slice(-24)
+          break
+        }
+        const tag = this.buffer.slice(end).match(/^<\/think(?:ing)?>/i)?.[0] ?? ''
+        this.buffer = this.buffer.slice(end + tag.length)
+        this.inThink = false
+      } else {
+        const start = this.buffer.search(/<think(?:ing)?\b[^>]*>/i)
+        if (start === -1) {
+          if (this.buffer.length > 24) {
+            output += this.buffer.slice(0, -24)
+            this.buffer = this.buffer.slice(-24)
+          }
+          break
+        }
+        output += this.buffer.slice(0, start)
+        const tag = this.buffer.slice(start).match(/^<think(?:ing)?\b[^>]*>/i)?.[0] ?? ''
+        this.buffer = this.buffer.slice(start + tag.length)
+        this.inThink = true
+      }
+    }
+    return output
+  }
+
+  flush(): string {
+    const rest = this.inThink ? '' : this.buffer
+    this.buffer = ''
+    this.inThink = false
+    return rest
+  }
+}
+
 export interface AiBlock {
   language: string
   code: string

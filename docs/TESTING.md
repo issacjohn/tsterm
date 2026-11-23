@@ -25,8 +25,11 @@ This covers:
 - Reference library import, text/PDF extraction, device-type scoping, duplicate detection, retrieval, and
   removal.
 - Per-terminal AI thread isolation, draft restoration, streaming text, and thread deletion.
-- ASA command catalog loading, BM25 ranking, risk filters, deterministic rendering, parameter validation,
-  model-ID allowlisting, and parameter provenance checks for the command router.
+- ASA command catalog loading, the Cisco documentation reference pack, BM25 ranking, risk filters,
+  deterministic rendering, parameter validation, model-ID allowlisting, and parameter provenance checks
+  for the command router.
+- Free-chat command hints, natural-language runbook matching with stemming, syslog/last-command retrieval
+  queries, and `<think>` tag filtering across streamed chunks.
 - The Electron main/preload/renderer type boundaries.
 
 ## Unit tests
@@ -137,8 +140,9 @@ The fast unit suite covers the catalog, BM25, rendering, and router validation w
 npm test -- tests/commands.test.ts
 ```
 
-The opt-in Ollama test builds the 503-record embedding index with `nomic-embed-text` and exercises the
-real Qwen3 8B router:
+The opt-in Ollama test builds the embedding index for the **503 fillable records** with
+`nomic-embed-text` (the 2,510 Cisco reference entries stay BM25-only) and exercises the real Qwen3 8B
+router:
 
 ```powershell
 $env:TSTERM_OLLAMA_TEST = '1'
@@ -156,7 +160,7 @@ node scripts/commands-ui-smoke.mjs
 ```
 
 Set `TSTERM_BUILD_VECTORS=1` to click **Build vector index** and wait for the footer to switch from
-`BM25 only` to `Hybrid · 503 embedded`. Set `TSTERM_COMMANDS_PACKAGED=1` to run the same checks against
+`BM25 only` to `Hybrid · 503/503 curated embedded`. Set `TSTERM_COMMANDS_PACKAGED=1` to run the same checks against
 `release/win-unpacked/TSTerm.exe`. Screenshots are written to `screenshots/commands-*.png`.
 
 The AI routing UI test requires Ollama plus `qwen3:8b`. It presets a temporary profile, asks the real
@@ -166,7 +170,9 @@ router for a host-to-host capture, and verifies the rendered command and paramet
 npm run test:commands-ai
 ```
 
-Screenshot `commands-04-ai-route.png` is written.
+Screenshot `commands-04-ai-route.png` is written. The command browser smoke also covers a Cisco
+documentation reference entry (`commands-05-reference.png`): documented syntax is shown, Fill is disabled,
+and the Cisco doc link is present.
 
 ## Missing-runtime UI test
 

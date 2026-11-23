@@ -3,8 +3,11 @@
 ## ASA command reference
 
 - New **ASA Command Reference** (`Ctrl+Shift+J`, `Session` menu, or the command palette).
-- **503 structured ASA records** generated from the 75 top-level commands, 407 runbook steps, and 21
+- **503 fillable ASA records** generated from the 75 top-level commands, 407 runbook steps, and 21
   complete examples from the ASA help index.
+- **2,510 Cisco documentation reference entries** imported from the official ASA A–H, I–R, S, and T–Z
+  command reference. They are searchable and copyable, with syntax, modes, risk, and a Cisco link, but
+  excluded from Fill and AI routing until parameterized.
 - One record per command with mode, risk, parameters, regex validation, examples, source, and cleanup.
 - Search by command name, natural-language symptom, keyword, interface, or exact token.
 - Risk filters for read-only, diagnostic, mutating, and destructive commands.
@@ -27,6 +30,18 @@
 - Values must appear in the question or terminal output and must pass the parameter regex.
 - Validation failures retry once, then fall back to the candidate list.
 - Low-confidence results do not auto-select; choose a candidate manually.
+
+## AI retrieval and reliability
+
+- Free chat now receives the top five matching command records (curated and Cisco reference) from the
+  local catalog, not just runbook summaries.
+- Runbook hints use partial, stemmed matching instead of requiring every question word to match.
+- Follow-up retrieval adds `%ASA-...` syslog IDs and the last terminal command from live output.
+- Automatic local setup checks for and pulls `nomic-embed-text`, then builds the 503-record fillable
+  command index in the background when model auto-download is enabled.
+- Ollama chat requests disable Qwen3 thinking with `think: false`; DeepSeek R1 gets a larger answer budget.
+- Literal `<think>` / `<thinking>` blocks are removed from streamed and final text, including tags split
+  across chunks.
 
 ## Safety
 

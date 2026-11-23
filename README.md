@@ -90,16 +90,22 @@ model in VRAM.
 
 ![ASA command reference and router](screenshots/commands-04-ai-route.png)
 
-**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **503 ASA command
-records**: 75 top-level commands, 407 runbook steps, and 21 complete examples. Search runs locally with
-BM25 and, after a
-one-time Ollama embedding pass, hybrid vector retrieval merged with reciprocal rank fusion.
+**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **3,013 ASA command
+records**:
 
-The **Let AI choose** action is different from free chat. The model receives only the top candidate
-records and returns JSON with a candidate ID and extracted parameter values. TSTerm rejects any ID that
-was not retrieved, drops any value that is not present in your question or terminal output, validates
-each parameter, and renders the command from the curated template. The model never writes the command
-string.
+- **503 fillable records**: 75 top-level commands, 407 runbook steps, and 21 complete examples.
+- **2,510 Cisco documentation reference entries** imported from the official ASA A–H, I–R, S, and T–Z
+  command reference.
+
+Search runs locally with BM25. The 503 fillable records can also be embedded once with Ollama and merged
+with reciprocal rank fusion; the documentation entries stay BM25-only. Reference entries show documented
+syntax, modes, risk, and a link to Cisco, but **Fill is disabled** because they are not parameterized yet.
+
+The **Let AI choose** action is different from free chat. The model receives only the top fillable
+candidate records and returns JSON with a candidate ID and extracted parameter values. TSTerm rejects any
+ID that was not retrieved, drops any value that is not present in your question or terminal output,
+validates each parameter, and renders the command from the curated template. The model never writes the
+command string, and documentation-only entries are never routed.
 
 Every record is classified as read-only, diagnostic, mutating, or destructive. Diagnostic records show
 their cleanup, and destructive records require typing `CONFIRM` before **Fill** is enabled. Fill writes
@@ -140,6 +146,14 @@ The boundary is deliberate and enforced in the app architecture:
 Cloud API keys are encrypted with Electron `safeStorage` and are never returned to the renderer. Local
 endpoints such as `http://127.0.0.1:11434/v1` keep the conversation on your machine. Each request goes
 through the Electron main process, so the renderer never receives terminal-execution capability.
+
+Free chat also retrieves the top five matching command records from the local ASA catalog. Follow-up
+questions such as “why did that fail?” automatically include recent `%ASA-...` syslog IDs and the last
+terminal command in the retrieval query. Runbook matching is partial and stemmed, so natural-language
+questions are not rejected just because one word is missing. When automatic local model downloads are
+enabled, TSTerm also installs `nomic-embed-text` and builds the fillable-command vector index in the
+background. Ollama requests disable thinking tokens with `think: false`; DeepSeek R1 receives a larger
+answer budget, and literal `<think>` blocks are filtered from the stream.
 
 Runbook details include an **Ask AI** action that opens the assistant with that workflow as the topic, so
 you can ask what to verify before and after without retyping the commands.

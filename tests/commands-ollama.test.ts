@@ -38,7 +38,8 @@ describe.skipIf(!enabled)('hybrid retrieval with local Ollama', () => {
       const status = await commands.buildVectorIndex(undefined, (event) => progress.push(event))
       expect(status.vectorError).toBeUndefined()
       expect(status.vectorReady).toBe(true)
-      expect(status.vectorCount).toBe(status.total)
+      expect(status.vectorCount).toBe(status.vectorTargetCount)
+      expect(status.vectorCount).toBeLessThan(status.total)
       expect(progress.at(-1)?.phase).toBe('done')
 
       const questions = [

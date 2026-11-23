@@ -55,12 +55,36 @@ describe('command catalog', () => {
     expect(commands.getWarnings()).toHaveLength(0)
   })
 
+  it('loads the Cisco documentation reference but keeps it out of routing pools', async () => {
+    const commands = service()
+    const status = commands.status()
+    expect(status.total).toBeGreaterThan(status.vectorTargetCount + 1000)
+
+    const docs = await commands.search({
+      query: 'aaa accounting command',
+      limit: 10,
+      useVector: false
+    })
+    expect(
+      docs.matches.some((match) => match.record.referenceOnly && match.record.source === 'cisco-docs')
+    ).toBe(true)
+
+    const curatedOnly = await commands.search({
+      query: 'aaa accounting command',
+      limit: 10,
+      useVector: false,
+      includeReference: false
+    })
+    expect(curatedOnly.matches.every((match) => !match.record.referenceOnly)).toBe(true)
+  })
+
   it('finds capture commands for a natural-language symptom', async () => {
     const commands = service()
     const result = await commands.search({
       query: 'capture traffic between two hosts',
       limit: 5,
-      useVector: false
+      useVector: false,
+      includeReference: false
     })
     expect(result.matches.length).toBeGreaterThan(0)
     expect(
@@ -71,17 +95,44 @@ describe('command catalog', () => {
 
   it('classifies each command by what it actually does', async () => {
     const commands = service()
-    const cases: Array<[string, string, string]> = [
-      ['capture TSTCAP interface outside match ip host 10.1.1.1 host 8.8.8.8', 'capture-host', 'diagnostic'],
-      ['show capture TSTCAP', 'capture-host', 'read_only'],
-      ['configure terminal', 'capture-acl', 'mutating'],
-      ['clear configure access-list TSTCAP_ACL', 'capture-acl', 'mutating'],
-      ['reload', 'asa.cmd.reload', 'destructive']
+    const cases: Array<[string, (record: AsaCommandRecord) => boolean, string]> = [
+      [
+        'capture TSTCAP interface outside match ip host 10.1.1.1 host 8.8.8.8',
+        (record) =>
+          record.id.startsWith('asa.rb.capture-host.') &&
+          record.commandTemplate.startsWith('capture TSTCAP'),
+        'diagnostic'
+      ],
+      [
+        'show capture TSTCAP',
+        (record) => record.commandTemplate === 'show capture TSTCAP',
+        'read_only'
+      ],
+      [
+        'configure terminal',
+        (record) => record.commandTemplate === 'configure terminal',
+        'mutating'
+      ],
+      [
+        'clear configure access-list TSTCAP_ACL',
+        (record) => record.commandTemplate.startsWith('clear configure access-list'),
+        'mutating'
+      ],
+      [
+        'reload',
+        (record) => record.id === 'asa.cmd.reload',
+        'destructive'
+      ]
     ]
-    for (const [query, idPart, risk] of cases) {
-      const result = await commands.search({ query, limit: 50, useVector: false })
-      const record = result.matches.find((match) => match.record.id.includes(idPart))?.record
-      expect(record, `${query} should retrieve ${idPart}`).toBeTruthy()
+    for (const [query, matches, risk] of cases) {
+      const result = await commands.search({
+        query,
+        limit: 50,
+        useVector: false,
+        includeReference: false
+      })
+      const record = result.matches.find((match) => matches(match.record))?.record
+      expect(record, `${query} should retrieve a matching curated record`).toBeTruthy()
       expect(record?.risk).toBe(risk)
     }
   })
@@ -91,7 +142,8 @@ describe('command catalog', () => {
     const result = await commands.search({
       query: 'capture traffic between two hosts',
       limit: 10,
-      useVector: false
+      useVector: false,
+      includeReference: false
     })
     expect(result.matches.some((match) => match.record.id === 'asa.cmd.capture')).toBe(false)
   })
@@ -102,7 +154,8 @@ describe('command catalog', () => {
       query: 'show interface ip brief',
       risk: 'read_only',
       limit: 10,
-      useVector: false
+      useVector: false,
+      includeReference: false
     })
     expect(result.matches.length).toBeGreaterThan(0)
     expect(result.matches.every((match) => match.record.risk === 'read_only')).toBe(true)
@@ -193,7 +246,12 @@ describe('AI router contract', () => {
   const query = 'capture TSTCAP interface outside match ip host 10.1.1.1 host 8.8.8.8'
 
   async function findCandidate(commands: CommandService): Promise<AsaCommandRecord> {
-    const result = await commands.search({ query, limit: 50, useVector: false })
+    const result = await commands.search({
+      query,
+      limit: 50,
+      useVector: false,
+      includeReference: false
+    })
     const record = result.matches.find((match) =>
       match.record.id.startsWith('asa.rb.capture-host.')
     )?.record

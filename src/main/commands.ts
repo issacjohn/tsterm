@@ -18,6 +18,7 @@ import { isOllamaProfile, ollamaBase } from './ai'
 import type { Store } from './store'
 
 const CATALOG_FILE = 'asa-commands.json'
+const REFERENCE_FILE = 'asa-reference.json'
 const EMBED_MODEL = 'nomic-embed-text'
 const BM25_K1 = 1.4
 const BM25_B = 0.75
@@ -141,10 +142,12 @@ function commandText(record: AsaCommandRecord): string {
     record.commandTemplate,
     record.commandTemplate,
     record.commandTemplate,
+    record.syntax ?? '',
     record.keywords.join(' '),
     record.description,
     record.examples.join(' '),
-    record.cleanup.join(' ')
+    record.cleanup.join(' '),
+    record.mode
   ]
     .filter(Boolean)
     .join(' ')
@@ -332,16 +335,27 @@ export class CommandService {
   }
 
   private load(): void {
-    const file = path.join(this.commandsDir, CATALOG_FILE)
+    const curated = this.readCatalog(path.join(this.commandsDir, CATALOG_FILE), true)
+    const reference = this.readCatalog(path.join(this.commandsDir, REFERENCE_FILE), false)
+    const byId = new Map<string, AsaCommandRecord>()
+    for (const record of [...curated, ...reference]) {
+      if (!byId.has(record.id)) byId.set(record.id, record)
+    }
+    this.records = [...byId.values()]
+    this.byId = byId
+    if (!curated.length) this.warnings.push('The curated ASA command catalog is empty or missing.')
+  }
+
+  private readCatalog(file: string, required: boolean): AsaCommandRecord[] {
     try {
       if (!fs.existsSync(file)) {
-        this.warnings.push(`Command catalog not found at ${file}.`)
-        return
+        if (required) this.warnings.push(`Command catalog not found at ${file}.`)
+        return []
       }
       const raw = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')
       const parsed = JSON.parse(raw) as { commands?: unknown }
       const commands = Array.isArray(parsed.commands) ? parsed.commands : []
-      this.records = commands.filter(isValidRecord).map((record) => ({
+      return commands.filter(isValidRecord).map((record) => ({
         ...record,
         keywords: record.keywords.filter((item) => typeof item === 'string'),
         parameters: record.parameters.filter(
@@ -351,12 +365,18 @@ export class CommandService {
         cleanup: record.cleanup.filter((item) => typeof item === 'string'),
         mode: typeof record.mode === 'string' ? record.mode : 'privileged EXEC',
         version: typeof record.version === 'string' ? record.version : '9.24',
-        source: record.source ?? 'runbook'
+        source: record.source ?? 'runbook',
+        referenceOnly: record.referenceOnly === true,
+        syntax: typeof record.syntax === 'string' ? record.syntax : undefined,
+        modes: Array.isArray(record.modes)
+          ? record.modes.filter((item) => typeof item === 'string')
+          : undefined,
+        url: typeof record.url === 'string' ? record.url : undefined,
+        book: typeof record.book === 'string' ? record.book : undefined
       }))
-      this.byId = new Map(this.records.map((record) => [record.id, record]))
-      if (!this.records.length) this.warnings.push('The ASA command catalog is empty.')
     } catch (error) {
-      this.warnings.push(`Could not read the ASA command catalog: ${(error as Error).message}`)
+      this.warnings.push(`Could not read ${path.basename(file)}: ${(error as Error).message}`)
+      return []
     }
   }
 
@@ -396,9 +416,13 @@ export class CommandService {
     }
   }
 
+  private vectorTargets(): AsaCommandRecord[] {
+    return this.records.filter((record) => !record.referenceOnly)
+  }
+
   private validEmbeddingCount(): number {
     let count = 0
-    for (const record of this.records) {
+    for (const record of this.vectorTargets()) {
       const entry = this.embeddings.get(record.id)
       if (entry && entry.hash === hashText(embeddingText(record))) count += 1
     }
@@ -507,12 +531,14 @@ export class CommandService {
   }
 
   status(): CommandStatusResult {
+    const targets = this.vectorTargets()
     const vectorCount = this.validEmbeddingCount()
     return {
       total: this.records.length,
-      vectorReady: this.records.length > 0 && vectorCount === this.records.length,
+      vectorReady: targets.length > 0 && vectorCount === targets.length,
       vectorModel: EMBED_MODEL,
       vectorCount,
+      vectorTargetCount: targets.length,
       indexing: this.indexing,
       vectorError: this.vectorError
     }
@@ -523,16 +549,17 @@ export class CommandService {
     onProgress: (progress: CommandIndexProgress) => void
   ): Promise<CommandStatusResult> {
     if (this.indexing) throw new Error('The vector index is already being built.')
-    if (!this.records.length) throw new Error('The ASA command catalog is empty.')
+    const targets = this.vectorTargets()
+    if (!targets.length) throw new Error('The curated ASA command catalog is empty.')
     this.indexing = true
     this.vectorError = undefined
     const baseUrl = this.ollamaBaseUrl(profileId)
-    const total = this.records.length
+    const total = targets.length
     let done = 0
 
     try {
       onProgress({ phase: 'embedding', done, total })
-      const pending = this.records.filter((record) => {
+      const pending = targets.filter((record) => {
         const entry = this.embeddings.get(record.id)
         return !entry || entry.hash !== hashText(embeddingText(record))
       })
@@ -563,8 +590,9 @@ export class CommandService {
         onProgress({ phase: 'embedding', done, total })
       }
 
+      const targetIds = new Set(targets.map((record) => record.id))
       for (const id of [...this.embeddings.keys()]) {
-        if (!this.byId.has(id)) this.embeddings.delete(id)
+        if (!targetIds.has(id)) this.embeddings.delete(id)
       }
       onProgress({ phase: 'saving', done: total, total })
       await this.writeEmbeddings()
@@ -584,10 +612,179 @@ export class CommandService {
     }
   }
 
+  private async listOllamaModels(baseUrl: string): Promise<string[]> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 15_000)
+    try {
+      const response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal })
+      if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}.`)
+      const data = (await response.json()) as {
+        models?: Array<{ name?: string; model?: string } | string>
+      }
+      return (data.models ?? [])
+        .map((model) => (typeof model === 'string' ? model : model.name ?? model.model ?? ''))
+        .filter(Boolean)
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        throw new Error(`Ollama did not respond at ${baseUrl}.`)
+      }
+      if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test((error as Error).message)) {
+        throw new Error(`Ollama is not responding at ${baseUrl}. Start Ollama and try again.`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private async pullEmbeddingModel(
+    baseUrl: string,
+    onProgress: (progress: CommandIndexProgress) => void,
+    total: number
+  ): Promise<void> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 900_000)
+    try {
+      const response = await fetch(`${baseUrl}/api/pull`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: EMBED_MODEL, stream: true }),
+        signal: controller.signal
+      })
+      if (!response.ok || !response.body) {
+        const detail = await response.text().catch(() => '')
+        throw new Error(
+          `Ollama could not download ${EMBED_MODEL} (HTTP ${response.status})${
+            detail ? `: ${detail.slice(0, 200)}` : ''
+          }.`
+        )
+      }
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let success = false
+      const handleLine = (line: string): void => {
+        if (!line.trim()) return
+        let payload: {
+          status?: string
+          completed?: number
+          total?: number
+          error?: string
+        }
+        try {
+          payload = JSON.parse(line)
+        } catch {
+          return
+        }
+        if (payload.error) throw new Error(payload.error)
+        const percent =
+          payload.completed !== undefined && payload.total
+            ? Math.min(100, Math.round((payload.completed / payload.total) * 100))
+            : undefined
+        onProgress({
+          phase: 'pulling',
+          done: 0,
+          total,
+          percent,
+          status: payload.status
+        })
+        if (payload.status === 'success') success = true
+      }
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() ?? ''
+        for (const line of lines) handleLine(line)
+      }
+      if (buffer.trim()) handleLine(buffer)
+      if (!success) throw new Error(`Ollama did not confirm that ${EMBED_MODEL} was installed.`)
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        throw new Error(`Downloading ${EMBED_MODEL} timed out.`)
+      }
+      if (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test((error as Error).message)) {
+        throw new Error(`Ollama is not responding at ${baseUrl}. Start Ollama and try again.`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private async ensureEmbeddingModel(
+    baseUrl: string,
+    onProgress: (progress: CommandIndexProgress) => void,
+    total: number
+  ): Promise<void> {
+    const wanted = EMBED_MODEL.toLowerCase().replace(/:latest$/, '')
+    const models = await this.listOllamaModels(baseUrl)
+    const installed = models.some(
+      (model) => model.toLowerCase().replace(/:latest$/, '') === wanted
+    )
+    if (installed) return
+    if (!this.store.getSettings().aiAutoPullLocalModels) {
+      throw new Error(
+        `The embedding model ${EMBED_MODEL} is not installed. Run "ollama pull ${EMBED_MODEL}" or enable automatic local model downloads.`
+      )
+    }
+    onProgress({
+      phase: 'pulling',
+      done: 0,
+      total,
+      percent: 0,
+      status: `Downloading ${EMBED_MODEL}`
+    })
+    await this.pullEmbeddingModel(baseUrl, onProgress, total)
+  }
+
+  private ensurePromise: Promise<CommandStatusResult> | null = null
+
+  /**
+   * Makes hybrid search work without opening the command browser first:
+   * checks for nomic-embed-text, pulls it when auto-download is enabled, then
+   * builds the curated-record embedding index.
+   */
+  ensureVectorIndex(
+    profileId: string | undefined,
+    onProgress: (progress: CommandIndexProgress) => void
+  ): Promise<CommandStatusResult> {
+    if (this.status().vectorReady) return Promise.resolve(this.status())
+    if (this.ensurePromise) return this.ensurePromise
+    this.ensurePromise = this.ensureVectorIndexInternal(profileId, onProgress).finally(() => {
+      this.ensurePromise = null
+    })
+    return this.ensurePromise
+  }
+
+  private async ensureVectorIndexInternal(
+    profileId: string | undefined,
+    onProgress: (progress: CommandIndexProgress) => void
+  ): Promise<CommandStatusResult> {
+    const total = this.vectorTargets().length
+    if (!total) {
+      this.vectorError = 'The curated ASA command catalog is empty.'
+      return this.status()
+    }
+    if (this.indexing) return this.status()
+    const baseUrl = this.ollamaBaseUrl(profileId)
+    try {
+      onProgress({ phase: 'checking', done: 0, total })
+      await this.ensureEmbeddingModel(baseUrl, onProgress, total)
+      return await this.buildVectorIndex(profileId, onProgress)
+    } catch (error) {
+      this.vectorError = (error as Error).message
+      onProgress({ phase: 'error', done: 0, total, error: this.vectorError })
+      return this.status()
+    }
+  }
+
   private eligible(request: CommandSearchRequest): AsaCommandRecord[] {
     const mode = request.mode?.trim().toLowerCase()
     return this.records.filter((record) => {
       if (request.risk && record.risk !== request.risk) return false
+      if (request.includeReference === false && record.referenceOnly) return false
       if (mode && !record.mode.toLowerCase().includes(mode)) return false
       return true
     })
@@ -669,6 +866,8 @@ export class CommandService {
         item.score += 0.08
       }
       if (hostIntent && placeholders.has('src') && placeholders.has('dst')) item.score += 0.06
+      if (item.record.referenceOnly) item.score -= 0.15
+      else item.score += 0.05
 
       if (template === normalizedQuery) item.score += 0.6
       else if (normalizedQuery.includes(template)) item.score += 0.3
@@ -815,7 +1014,14 @@ export class CommandService {
     const empty: CommandRouteResult = { ok: false, params: {}, missing: [], candidates: [] }
     if (!query) return { ...empty, error: 'Type a question or symptom first.' }
 
-    const search = await this.search({ query, limit: 20, useVector: true })
+    // Routing must never offer a documentation-only entry: its syntax is not
+    // parameterized, so it cannot be rendered safely.
+    const search = await this.search({
+      query,
+      limit: 20,
+      useVector: true,
+      includeReference: false
+    })
     const ranked = search.matches.map((match) => match.record)
     // Top-level catalog entries (for example "capture") are useful for browsing
     // but are not complete commands. Prefer complete runbook steps when there
@@ -829,7 +1035,9 @@ export class CommandService {
     })
     // Literal examples are for browsing and copying. Routing to one could fill
     // example IPs or ports instead of the values from the user's request.
-    const routingPool = ranked.filter((record) => !record.id.startsWith('asa.example.'))
+    const routingPool = ranked.filter(
+      (record) => !record.id.startsWith('asa.example.') && !record.referenceOnly
+    )
     const runbookSteps = routingPool.filter((record) => !record.id.startsWith('asa.cmd.'))
     const preferred = (runbookSteps.length >= 3 ? runbookSteps : routingPool).filter(
       (record) =>

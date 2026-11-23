@@ -1,10 +1,30 @@
 import { isLoopbackUrl } from '@shared/ai-utils'
-import type { AiChatMessage } from '@shared/types'
-import { collectAiContext } from './ai-context'
+import type { AiChatMessage, AsaCommandRecord } from '@shared/types'
+import { buildRetrievalQuery, collectAiContext } from './ai-context'
 import { getLocalModelState } from './ai-local'
 import { useAppStore, type AppStore, type PaneState } from '../store'
 
 let streamUnsub: (() => void) | null = null
+
+function formatCommandHint(record: AsaCommandRecord): string {
+  return [
+    `### ${record.commandTemplate}`,
+    record.description,
+    `Risk: ${record.risk} · Mode: ${record.mode} · Source: ${record.source}${
+      record.referenceOnly ? ' (documentation reference, not device-verified)' : ''
+    }`,
+    record.referenceOnly && record.syntax ? `Syntax: ${record.syntax}` : '',
+    record.parameters.length
+      ? `Parameters: ${record.parameters
+          .map((parameter) => `${parameter.name}${parameter.required ? '*' : ''}`)
+          .join(', ')}`
+      : '',
+    record.cleanup.length ? `Cleanup: ${record.cleanup.join(' · ')}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 1200)
+}
 
 function findPane(state: AppStore, paneKey: string): PaneState | undefined {
   for (const tab of state.tabs) {
@@ -85,7 +105,18 @@ export async function sendAiMessage(
   })
 
   try {
+    const aiContext = collectAiContext({
+      includeContext: state.settings.aiIncludeContext,
+      prompt,
+      pane
+    })
+    const retrievalQuery = buildRetrievalQuery(
+      prompt,
+      aiContext.terminalTail,
+      aiContext.currentCommand
+    )
     let referenceHints: string[] = []
+    let commandHints: string[] = []
     const typeId = pane.deviceTypeId || pane.session?.deviceType
     const referenceCount = useAppStore
       .getState()
@@ -93,7 +124,7 @@ export async function sendAiMessage(
     if (referenceCount > 0) {
       try {
         const references = await window.tsterm.references.search({
-          query: prompt,
+          query: retrievalQuery,
           deviceTypeId: typeId,
           limit: 4
         })
@@ -106,6 +137,16 @@ export async function sendAiMessage(
         // Reference retrieval is best-effort.
       }
     }
+    try {
+      const catalog = await window.tsterm.commands.search({
+        query: retrievalQuery,
+        limit: 5,
+        useVector: true
+      })
+      commandHints = catalog.matches.map((match) => formatCommandHint(match.record))
+    } catch {
+      // Command catalog retrieval is best-effort.
+    }
 
     const result = await window.tsterm.ai.chat({
       requestId,
@@ -113,12 +154,9 @@ export async function sendAiMessage(
       messages: nextMessages.slice(-12),
       includeContext: state.settings.aiIncludeContext,
       context: {
-        ...collectAiContext({
-          includeContext: state.settings.aiIncludeContext,
-          prompt,
-          pane
-        }),
-        referenceHints
+        ...aiContext,
+        referenceHints,
+        commandHints
       }
     })
 

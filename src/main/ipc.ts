@@ -421,12 +421,25 @@ export function registerIpc(services: IpcServices): void {
       limit: Number(input.limit) || 8,
       risk,
       mode: typeof input.mode === 'string' ? input.mode.slice(0, 80) : undefined,
-      useVector: input.useVector !== false
+      useVector: input.useVector !== false,
+      includeReference: input.includeReference !== false
     })
   })
   ipcMain.handle('commands:index-vectors', async (event, profileId?: string) => {
     try {
       return await commands.buildVectorIndex(optionalString(profileId), (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send('commands:index-progress', progress)
+      })
+    } catch (error) {
+      return {
+        ...commands.status(),
+        vectorError: (error as Error).message
+      }
+    }
+  })
+  ipcMain.handle('commands:ensure-index', async (event, profileId?: string) => {
+    try {
+      return await commands.ensureVectorIndex(optionalString(profileId), (progress) => {
         if (!event.sender.isDestroyed()) event.sender.send('commands:index-progress', progress)
       })
     } catch (error) {

@@ -7,6 +7,7 @@ import { CatalogService } from '../src/main/catalog'
 import { DEFAULT_SETTINGS } from '../src/shared/themes'
 import {
   analyzeAiCommands,
+  buildRetrievalQuery,
   extractCommands,
   extractInlineCommands,
   isLoopbackUrl,
@@ -15,6 +16,8 @@ import {
   parseAiContent,
   promptInputText,
   sanitizeTerminalText,
+  stripThinkTags,
+  ThinkTagFilter,
   toFillableCommand
 } from '../src/shared/ai-utils'
 import type { Store } from '../src/main/store'
@@ -269,6 +272,7 @@ describe('AI provider requests', () => {
       const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
       expect(url).toBe('http://127.0.0.1:11434/api/chat')
       const payload = JSON.parse(String(init.body))
+      expect(payload.think).toBe(false)
       expect(payload.options.num_ctx).toBe(16384)
       expect(payload.options.num_predict).toBe(profile.maxTokens)
       expect(payload.messages[0].role).toBe('system')
@@ -735,6 +739,62 @@ describe('runbook retrieval', () => {
     const hints = buildRunbookHints(asa, 'packet capture inside interface').join('\n')
     expect(hints.length).toBeGreaterThan(0)
     expect(hints).not.toContain('Get-NetAdapter')
+  })
+
+  it('finds runbooks for natural-language questions without every word matching', () => {
+    const hints = buildRunbookHints(
+      asa,
+      'why do my users keep failing vpn authentication'
+    ).join('\n')
+    expect(hints).toMatch(/vpn|radius|aaa/i)
+  })
+})
+
+describe('follow-up retrieval and thinking tags', () => {
+  it('adds syslogs and the last terminal command to the retrieval query', () => {
+    const query = buildRetrievalQuery(
+      'why did that fail?',
+      [
+        'ciscoasa# show crypto ikev2 sa',
+        '%ASA-4-113019: Group = 1.1.1.1, Username = test',
+        'ciscoasa#'
+      ].join('\n')
+    )
+    expect(query).toContain('why did that fail?')
+    expect(query).toContain('%ASA-4-113019')
+    expect(query).toContain('show crypto ikev2 sa')
+  })
+
+  it('removes complete and unclosed thinking blocks from final text', () => {
+    expect(stripThinkTags('before <think>secret</think> after')).not.toContain('secret')
+    expect(stripThinkTags('before <thinking>secret')).toBe('before')
+    expect(stripThinkTags('plain answer')).toBe('plain answer')
+  })
+
+  it('filters thinking blocks split across stream chunks', () => {
+    const filter = new ThinkTagFilter()
+    const chunks = ['hello <thi', 'nk>hidden</thi', 'nk> world', '!']
+    let output = ''
+    for (const chunk of chunks) output += filter.push(chunk)
+    output += filter.flush()
+    expect(output).not.toContain('hidden')
+    expect(output).toContain('hello')
+    expect(output).toContain('world!')
+  })
+
+  it('includes retrieved command hints in the system prompt', () => {
+    const prompt = buildSystemPrompt({
+      requestId: 'test-request-id',
+      profileId: 'test-provider',
+      messages: [{ role: 'user', content: 'why did that fail?' }],
+      includeContext: false,
+      context: {
+        deviceTypeName: 'Cisco ASA',
+        commandHints: ['### show crypto ikev2 sa\nRisk: read_only · Mode: privileged EXEC']
+      }
+    })
+    expect(prompt).toContain('Retrieved ASA command records')
+    expect(prompt).toContain('show crypto ikev2 sa')
   })
 })
 
