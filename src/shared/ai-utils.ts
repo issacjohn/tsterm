@@ -1,3 +1,22 @@
+const COMMAND_START =
+  /^(?:show|display|debug|undebug|capture|monitor|terminal|clear|no|ping|traceroute|tracert|nslookup|dig|host|ipconfig|ip|ifconfig|netsh|route|arp|netstat|ss|tcpdump|pktmon|curl|openssl|grep|systemctl|journalctl|nmcli|sudo|write|copy|reload|configure|packet-trace|get-|test-|resolve-)\b/i
+
+export function looksLikeCommand(value: string): boolean {
+  const command = value.trim()
+  if (!command || command.length > 4096) return false
+  if (/[\r\n]/.test(command)) return false
+  if (/^(?:https?:\/\/|www\.)/i.test(command)) return false
+  if (/[{}]/.test(command)) return false
+  return COMMAND_START.test(command)
+}
+
+export function isSmallModelName(value: string): boolean {
+  const model = value.trim().toLowerCase().replace(/:latest$/, '')
+  if (!model) return false
+  if (model === 'llama3.2') return true
+  return /(?:^|[:/_-])(1b|2b|3b|mini|tiny)(?:$|[:/_.-])/.test(model)
+}
+
 export function isLoopbackUrl(value: string): boolean {
   try {
     const url = new URL(value)

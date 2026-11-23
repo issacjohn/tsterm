@@ -19,6 +19,7 @@ import { terminalRegistry } from './terminal-registry'
 export {
   analyzeAiCommands,
   extractCommands,
+  looksLikeCommand,
   parseAiContent,
   sanitizeTerminalText,
   stripPromptPrefix,
@@ -28,7 +29,7 @@ export type { AiBlock, AiSegment } from '@shared/ai-utils'
 
 const MAX_TAIL_LINES = 80
 const MAX_TAIL_CHARS = 6000
-const MAX_HINTS = 4
+const MAX_HINTS = 6
 
 export interface TerminalSnapshot {
   tail?: string
@@ -78,8 +79,24 @@ function describeWorkflow(workflow: Workflow): string {
 export function buildRunbookHints(type: DeviceType | undefined, query: string): string[] {
   if (!type) return []
   try {
-    const hits = searchWorkflows(type, query).slice(0, MAX_HINTS)
-    return hits.map(({ workflow }) => describeWorkflow(workflow).slice(0, 1400))
+    const hits = searchWorkflows(type, query)
+    const hints = hits
+      .slice(0, MAX_HINTS)
+      .map(({ workflow }) => describeWorkflow(workflow).slice(0, 1600))
+    if (hits.length < 3) {
+      const categories = type.categories.map((category) => category.name).join(' · ')
+      const titles = type.workflows
+        .slice(0, 90)
+        .map((workflow) => `- ${workflow.title}`)
+        .join('\n')
+      hints.push(
+        `### TSTerm catalog coverage\nCategories: ${categories}\nRunbook titles:\n${titles}`.slice(
+          0,
+          4000
+        )
+      )
+    }
+    return hints
   } catch {
     return []
   }
@@ -102,10 +119,12 @@ export function collectAiContext(options: AiContextOptions): AiChatContext {
     vendor: type?.vendor,
     family: type?.family,
     hostLabel: host?.label ?? pane?.title,
-    deviceNotes: options.includeContext ? type?.notes.slice(0, 8) : undefined,
+    // Device packs and runbook knowledge come from the local catalog, not the
+    // terminal. They are safe to include even when live context is off.
+    deviceNotes: type?.notes.slice(0, 10),
     terminalTail: options.includeContext ? snapshot.tail : undefined,
     currentCommand: options.includeContext ? snapshot.currentCommand : undefined,
-    runbookHints: options.includeContext ? buildRunbookHints(type, options.prompt) : []
+    runbookHints: buildRunbookHints(type, options.prompt)
   }
 }
 

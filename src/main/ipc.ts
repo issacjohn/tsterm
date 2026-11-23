@@ -24,6 +24,7 @@ import type { ForwardManager } from './forwarding'
 import type { QuitCoordinator } from './quit'
 import type { UpdateService } from './updates'
 import type { AiService } from './ai'
+import { installOllamaRuntime } from './ollama-runtime'
 
 export interface IpcServices {
   store: Store
@@ -332,7 +333,17 @@ export function registerIpc(services: IpcServices): void {
     return updates.check(Boolean(force))
   })
 
-  ipcMain.handle('ai:chat', (_event, request) => ai.chat(request))
+  ipcMain.handle('ai:chat', (event, request) =>
+    ai.chat(request, (text) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('ai:chat-stream', {
+          requestId: request?.requestId,
+          type: 'delta',
+          text
+        })
+      }
+    })
+  )
   ipcMain.handle('ai:list-models', (_event, request) => ai.listModels(request))
   ipcMain.handle('ai:local-status', (_event, request) => ai.localStatus(request))
   ipcMain.handle('ai:pull-model', (event, request) =>
@@ -340,6 +351,7 @@ export function registerIpc(services: IpcServices): void {
       if (!event.sender.isDestroyed()) event.sender.send('ai:pull-progress', progress)
     })
   )
+  ipcMain.handle('ai:install-runtime', () => installOllamaRuntime())
   ipcMain.handle('ai:save-key', (_event, profileId: string, key: string) => {
     store.saveAiKey(requiredString(profileId, 'AI profile id'), requiredString(key, 'API key'))
     return store.getAiKeyIds()

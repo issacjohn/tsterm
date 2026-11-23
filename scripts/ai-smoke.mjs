@@ -54,15 +54,26 @@ const server = http.createServer((request, response) => {
       try {
         const payload = JSON.parse(body)
         requests.push(payload)
-        return json(200, {
-          choices: [
-            {
-              message: {
-                content: REPLY
-              }
-            }
-          ]
+        response.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache'
         })
+        const pieces = REPLY.match(/[\s\S]{1,24}/g) || []
+        let index = 0
+        const send = () => {
+          if (response.writableEnded) return
+          if (index < pieces.length) {
+            response.write(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: pieces[index] } }] })}\n\n`
+            )
+            index += 1
+            setTimeout(send, 35)
+          } else {
+            response.write('data: [DONE]\n\n')
+            response.end()
+          }
+        }
+        send()
       } catch (error) {
         return json(400, { error: { message: error.message } })
       }
@@ -167,7 +178,7 @@ try {
     throw new Error('Terminal context is not marked as untrusted data.')
   }
   if (sent.model !== MODEL) throw new Error(`Wrong model sent: ${sent.model}`)
-  if (sent.stream !== false) throw new Error('Expected a non-streaming request.')
+  if (sent.stream !== true) throw new Error('Expected a streaming request.')
 
   const beforeRows = await page.locator('.xterm-rows > div').allInnerTexts()
   await page.locator('.ai-command-line .ai-fill-btn').first().click()

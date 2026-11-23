@@ -7579,7 +7579,8 @@ input[type="range"] {
 }
 
 .ai-local-panel.pulling,
-.ai-local-panel.checking {
+.ai-local-panel.checking,
+.ai-local-panel.installing {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   background: var(--accent-soft);
 }
@@ -7724,7 +7725,8 @@ input[type="range"] {
 }
 
 .ai-local-banner.pulling,
-.ai-local-banner.checking {
+.ai-local-banner.checking,
+.ai-local-banner.installing {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   background: var(--accent-soft);
   color: var(--accent);
@@ -7768,4 +7770,179 @@ input[type="range"] {
   padding: 0 6px;
   flex-shrink: 0;
   font-size: 8px;
+}
+
+/* ------------------------------------------------------- ai model quality */
+
+.ai-model-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.ai-model-presets > span {
+  color: var(--faint);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-model-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ai-model-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 100px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  text-align: left;
+}
+
+.ai-model-preset:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+}
+
+.ai-model-preset.active {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: var(--accent-soft);
+}
+
+.ai-model-preset strong {
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.ai-model-preset em {
+  color: var(--faint);
+  font-size: 7.5px;
+  font-style: normal;
+}
+
+.ai-model-preset.active em {
+  color: var(--accent);
+}
+
+.ai-model-quality {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 6px 7px;
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--border));
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+
+.ai-model-quality svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ai-model-quality-banner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 10px 6px;
+  padding: 5px 7px;
+  border: 1px solid color-mix(in srgb, var(--amber) 28%, var(--border));
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.ai-model-quality-banner svg {
+  flex-shrink: 0;
+}
+
+.ai-model-quality-banner span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.ai-model-quality-banner .btn {
+  height: 20px;
+  padding: 0 5px;
+  flex-shrink: 0;
+  color: var(--amber);
+  font-size: 8px;
+}
+
+.ai-stream-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  margin-left: 3px;
+  vertical-align: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: aiStreamBlink 1s step-end infinite;
+}
+
+@keyframes aiStreamBlink {
+  0%, 45% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+
+.ai-inline-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  margin: 1px 1px;
+  padding: 1px 4px;
+  vertical-align: baseline;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.ai-inline-command code {
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.ai-inline-command svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.ai-inline-command:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--accent));
+}
+
+.ai-inline-command:disabled {
+  opacity: 0.5;
+}
+
+.ai-text code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 9px;
 }

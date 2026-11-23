@@ -29,13 +29,14 @@ import {
 } from 'lucide-react'
 import type { AiProfile, AppSettings, AppThemeId, TerminalTheme } from '@shared/types'
 import { getTerminalTheme, TERMINAL_THEMES } from '@shared/themes'
-import { isLoopbackUrl } from '@shared/ai-utils'
+import { isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
 import { useAppStore, type SettingsTab } from '../../store'
 import { saveSettings } from '../../lib/session-actions'
 import {
   cancelLocalModelPull,
   ensureLocalModel,
   formatModelBytes,
+  installLocalRuntime,
   localPullStatusLabel,
   useLocalModelState,
   type LocalModelState
@@ -237,15 +238,26 @@ function ThemeTile({ theme, active, onClick }: { theme: TerminalTheme; active: b
   )
 }
 
+const MODEL_PRESETS: Array<{ id: string; name: string; note: string }> = [
+  { id: 'qwen2.5:7b', name: 'Qwen2.5 7B', note: 'Recommended' },
+  { id: 'llama3.1:8b', name: 'Llama 3.1 8B', note: 'Strong general' },
+  { id: 'qwen2.5:3b', name: 'Qwen2.5 3B', note: 'Lighter' },
+  { id: 'llama3.2', name: 'Llama 3.2 3B', note: 'Fastest / weakest' }
+]
+
 function LocalModelPanel({
   profile,
   state,
   onCheck,
+  onDownload,
+  onInstall,
   onOpenOllama
 }: {
   profile: AiProfile
   state: LocalModelState
   onCheck: (force: boolean) => void
+  onDownload: () => void
+  onInstall: () => void
   onOpenOllama: () => void
 }): React.JSX.Element {
   const percent = state.percent
@@ -269,6 +281,13 @@ function LocalModelPanel({
         <div className="ai-local-line">
           <Loader2 size={13} className="spin" />
           <span>Checking Ollama and installed models…</span>
+        </div>
+      ) : null}
+
+      {state.phase === 'installing' ? (
+        <div className="ai-local-line">
+          <Loader2 size={13} className="spin" />
+          <span>Installing Ollama with winget… This can take a few minutes.</span>
         </div>
       ) : null}
 
@@ -323,8 +342,20 @@ function LocalModelPanel({
         <div className="ai-local-message">
           <span>{state.error || `${profile.model} is not installed yet.`}</span>
           <div className="ai-local-actions">
-            {canDownload ? (
-              <button className="btn btn-primary btn-sm" onClick={() => onCheck(true)}>
+            {needsOllama ? (
+              <>
+                <button className="btn btn-primary btn-sm" onClick={onInstall}>
+                  <Download size={13} /> Install Ollama
+                </button>
+                <button className="btn btn-sm" onClick={() => onCheck(true)}>
+                  <RefreshCw size={13} /> Retry
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={onOpenOllama}>
+                  <ExternalLink size={13} /> Download page
+                </button>
+              </>
+            ) : canDownload ? (
+              <button className="btn btn-primary btn-sm" onClick={onDownload}>
                 <Download size={13} /> Download model
               </button>
             ) : (
@@ -332,11 +363,6 @@ function LocalModelPanel({
                 <RefreshCw size={13} /> Retry
               </button>
             )}
-            {needsOllama ? (
-              <button className="btn btn-ghost btn-sm" onClick={onOpenOllama}>
-                <ExternalLink size={13} /> Get Ollama
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -439,11 +465,12 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
         profileDraft.temperature !== activeProfile.temperature)
   )
 
-  const saveProfile = (): void => {
+  const saveProfile = (override: Partial<AiProfile> = {}): void => {
     if (!profileDraft) return
+    const draft: AiProfile = { ...profileDraft, ...override }
     let parsed: URL
     try {
-      parsed = new URL(profileDraft.baseUrl.trim())
+      parsed = new URL(draft.baseUrl.trim())
     } catch {
       notify({ kind: 'error', title: 'Invalid base URL', message: 'Use a full http:// or https:// URL.' })
       return
@@ -452,17 +479,17 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
       notify({ kind: 'error', title: 'Invalid base URL', message: 'AI provider URLs must use http or https.' })
       return
     }
-    if (!profileDraft.name.trim()) {
+    if (!draft.name.trim()) {
       notify({ kind: 'warning', title: 'Name required', message: 'Give this provider a name.' })
       return
     }
     const next: AiProfile = {
-      ...profileDraft,
-      name: profileDraft.name.trim().slice(0, 80),
-      baseUrl: profileDraft.baseUrl.trim().replace(/\/+$/, ''),
-      model: profileDraft.model.trim().slice(0, 200),
-      maxTokens: Math.min(8192, Math.max(64, Math.round(profileDraft.maxTokens) || 1024)),
-      temperature: Math.min(2, Math.max(0, Number(profileDraft.temperature) || 0)),
+      ...draft,
+      name: draft.name.trim().slice(0, 80),
+      baseUrl: draft.baseUrl.trim().replace(/\/+$/, ''),
+      model: draft.model.trim().slice(0, 200),
+      maxTokens: Math.min(8192, Math.max(64, Math.round(draft.maxTokens) || 1024)),
+      temperature: Math.min(2, Math.max(0, Number(draft.temperature) || 0)),
       local: ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)
     }
     update({
@@ -470,6 +497,11 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
     })
     setProfileDraft(next)
     notify({ kind: 'success', title: 'Provider saved', message: next.name })
+  }
+
+  const applyModelPreset = (model: string): void => {
+    if (!profileDraft) return
+    saveProfile({ model })
   }
 
   const addProfile = (): void => {
@@ -1009,8 +1041,8 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                   <SettingToggle
                     checked={settings.aiIncludeContext}
                     onChange={(value) => update({ aiIncludeContext: value })}
-                    label="Include device and terminal context"
-                    description="Adds the device pack, matching runbooks, the current command line, and the last 80 terminal lines. Passwords and common secret fields are redacted."
+                    label="Include live terminal context"
+                    description="Adds the current command line and the last 80 terminal lines, with passwords and common secret fields redacted. Device type and matching runbook knowledge are always used."
                   />
                   <SettingToggle
                     checked={settings.aiAutoPullLocalModels}
@@ -1164,6 +1196,41 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                           </select>
                         ) : null}
                       </div>
+                      <div className="ai-model-presets">
+                        <span>Recommended models</span>
+                        <div className="ai-model-preset-row">
+                          {MODEL_PRESETS.map((preset) => (
+                            <button
+                              key={preset.id}
+                              className={cx(
+                                'ai-model-preset',
+                                (profileDraft.model === preset.id ||
+                                  profileDraft.model.replace(/:latest$/, '') === preset.id) &&
+                                  'active'
+                              )}
+                              onClick={() => applyModelPreset(preset.id)}
+                              title={`Use ${preset.id}`}
+                            >
+                              <strong>{preset.name}</strong>
+                              <em>{preset.note}</em>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="setting-description">
+                          Larger models are slower but far better at exact CLI syntax. 7B–8B is the practical
+                          minimum for real troubleshooting; tiny 1B–3B models often give generic answers.
+                        </p>
+                        {isSmallModelName(profileDraft.model) ? (
+                          <div className="ai-model-quality">
+                            <ShieldCheck size={12} />
+                            <span>
+                              This is a small model. If answers feel generic, switch to Qwen2.5 7B or
+                              Llama 3.1 8B.
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+
                       {modelError ? <div className="ai-inline-error">{modelError}</div> : null}
 
                       {localProfile && settings.aiEnabled ? (
@@ -1171,7 +1238,18 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                           profile={localProfile}
                           state={localStateForProfile}
                           onCheck={(force) =>
-                            void ensureLocalModel(localProfile, { autoPull: true, force })
+                            void ensureLocalModel(localProfile, {
+                              autoPull: settings.aiAutoPullLocalModels,
+                              force
+                            })
+                          }
+                          onDownload={() =>
+                            void ensureLocalModel(localProfile, { autoPull: true, force: true })
+                          }
+                          onInstall={() =>
+                            void installLocalRuntime(localProfile, {
+                              autoPull: settings.aiAutoPullLocalModels
+                            })
                           }
                           onOpenOllama={() =>
                             void window.tsterm.app.openExternal('https://ollama.com/download')
@@ -1240,7 +1318,7 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                       ) : null}
 
                       <div className="ai-profile-actions">
-                        <button className="btn btn-sm btn-primary" onClick={saveProfile} disabled={!profileIsDirty}>
+                        <button className="btn btn-sm btn-primary" onClick={() => saveProfile()} disabled={!profileIsDirty}>
                           <Check size={13} /> Save provider
                         </button>
                         {profileIsDirty ? <span className="ai-unsaved">Unsaved changes</span> : null}

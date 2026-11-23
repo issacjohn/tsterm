@@ -16,8 +16,12 @@ This covers:
 - The daily GitHub update check, including throttling and failure messages.
 - AI safety rules: requests are blocked while disabled, terminal output is marked untrusted, command fills
   cannot contain line breaks or control characters, and the AI service has no execution surface.
+- Streaming OpenAI-compatible and Anthropic SSE, non-streaming fallback, inline CLI command detection, and
+  small-model quality warnings.
 - Ollama status checks, loopback-only model downloads, streamed pull progress, cancellation, and model name
   validation.
+- Automatic Ollama runtime installation: winget success, installer failure, non-Windows fallback, tray-app
+  start, and clear manual instructions.
 - The Electron main/preload/renderer type boundaries.
 
 ## Unit tests
@@ -93,6 +97,28 @@ and `/api/pull` endpoints plus the OpenAI-compatible chat endpoint. It verifies:
 
 Screenshots `24-ai-model-download.png` through `26-ai-auto-pulled-chat.png` are written to `screenshots/`.
 No real Ollama process or multi-gigabyte download is involved.
+
+## Missing-runtime UI test
+
+`npm run test:ai-runtime` starts the app against a closed loopback port and enables the assistant. It
+confirms the local-model panel and Assistant banner show **Install Ollama**, **Retry**, and a download-page
+fallback — not a **Download** button that silently repeats the failed check.
+
+Screenshots `27-ai-install-ollama.png` and `28-ai-install-ollama-assistant.png` are written.
+
+## Real Ollama test
+
+This test is opt-in because it uses a real model and real inference:
+
+```bash
+ollama pull qwen2.5:7b
+npm run test:ai-ollama
+```
+
+It sends one short prompt through the TSTerm Assistant to the local Ollama server, waits for the streamed
+answer to finish, and verifies the content. It writes `screenshots/29-ai-real-ollama.png`. The script exits
+with code 2 and does not fail the suite if the model is missing. Override the model with
+`TSTERM_OLLAMA_MODEL=llama3.2`.
 
 ## Live debug cleanup test
 

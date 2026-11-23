@@ -9,6 +9,7 @@ export type LocalModelPhase =
   | 'ready'
   | 'missing'
   | 'pulling'
+  | 'installing'
   | 'error'
   | 'unsupported'
 
@@ -31,6 +32,7 @@ let activeKey = ''
 let activeRequestId: string | null = null
 let inFlight: Promise<void> | null = null
 let inFlightKey = ''
+let installInFlight: Promise<void> | null = null
 let queuedProfile: AiProfile | undefined
 let queuedOptions: EnsureLocalModelOptions | undefined
 
@@ -202,6 +204,69 @@ export interface EnsureLocalModelOptions {
   force?: boolean
 }
 
+export interface InstallLocalRuntimeOptions {
+  autoPull?: boolean
+}
+
+export async function installLocalRuntime(
+  profile: AiProfile,
+  options: InstallLocalRuntimeOptions = {}
+): Promise<void> {
+  if (installInFlight) return installInFlight
+  const run = (async () => {
+    publish({ ...statusBase(profile), phase: 'installing' })
+    let result: Awaited<ReturnType<typeof window.tsterm.ai.installRuntime>>
+    try {
+      result = await window.tsterm.ai.installRuntime()
+    } catch (error) {
+      result = { ok: false, error: (error as Error).message }
+    }
+
+    if (result.ok) {
+      useAppStore.getState().notify({
+        kind: 'success',
+        title: 'Ollama installed',
+        message: result.version ? `Ollama ${result.version} is running.` : 'Ollama is running.',
+        duration: 6000
+      })
+      await ensureLocalModel(profile, {
+        autoPull: options.autoPull ?? true,
+        force: true
+      })
+      return
+    }
+
+    const message = result.error || 'Ollama could not be installed automatically.'
+    publish({
+      ...statusBase(profile),
+      phase: 'missing',
+      status: {
+        ok: false,
+        runtime: 'ollama',
+        baseUrl: profile.baseUrl,
+        needsRuntime: true,
+        error: message
+      },
+      error: message
+    })
+    useAppStore.getState().notify({
+      kind: 'error',
+      title: 'Ollama install failed',
+      message: result.manual
+        ? `${message} You can install it from ollama.com.`
+        : message,
+      duration: 12000
+    })
+  })()
+
+  installInFlight = run
+  try {
+    await run
+  } finally {
+    if (installInFlight === run) installInFlight = null
+  }
+}
+
 /**
  * Checks the loopback Ollama endpoint and, when a model is missing, pulls it
  * through Ollama's native API. Downloads are deduplicated and survive the
@@ -217,6 +282,10 @@ export async function ensureLocalModel(
     if (inFlightKey !== key) {
       queuedProfile = profile
       queuedOptions = options
+      // A provider switch should not leave the old model downloading for
+      // minutes while the new endpoint shows nothing. Ollama keeps completed
+      // layers, so this is safe to resume later.
+      cancelLocalModelPull()
     }
     return inFlight
   }
@@ -255,6 +324,14 @@ export async function ensureLocalModel(
         status,
         error: status.error
       })
+      if (options.force) {
+        useAppStore.getState().notify({
+          kind: 'error',
+          title: status.needsRuntime ? 'Ollama is not available' : 'Local model check failed',
+          message: status.error,
+          duration: 12000
+        })
+      }
       return
     }
 

@@ -77,7 +77,16 @@ you already subscribe to. It is **off by default** and is configured separately 
 Ollama users do not need to run `ollama pull`. When the assistant is enabled, TSTerm checks the local
 Ollama server and automatically downloads the selected model through Ollama's pull API, with live progress
 and a cancel button. The download continues if you close Settings, and can be turned off with
-**Download local models automatically**. Ollama itself must be installed once.
+**Download local models automatically**.
+
+Responses stream token by token, so answers appear while the model is still writing. **Qwen2.5 7B** is the
+recommended local model for network CLI work; 1B–3B models are faster but often give generic answers, and
+TSTerm warns when one is selected. Device type, matching runbooks, and a catalog index are always sent to
+the model; live terminal lines remain opt-in.
+
+If Ollama itself is missing, **Install Ollama** runs the official `Ollama.Ollama` winget package on
+Windows and then continues with the model download. On macOS and Linux, TSTerm opens the official download
+page and resumes the same automatic check once Ollama is running. Ollama only needs to be installed once.
 
 ![Automatic local model download](screenshots/24-ai-model-download.png)
 
@@ -293,6 +302,12 @@ npm run test:ai
 
 # Simulates Ollama, verifies the automatic model pull, progress, background completion, and chat
 npm run test:ai-local
+
+# Checks the missing-runtime UI offers Install Ollama instead of a misleading Download button
+npm run test:ai-runtime
+
+# Requires Ollama plus qwen2.5:7b; sends a real streaming prompt through TSTerm
+npm run test:ai-ollama
 
 # Starts a real RADIUS debug, quits through the guard, and checks the cleanup with show debug
 npm run test:debug-guard

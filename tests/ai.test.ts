@@ -6,6 +6,8 @@ import {
   analyzeAiCommands,
   extractCommands,
   isLoopbackUrl,
+  isSmallModelName,
+  looksLikeCommand,
   parseAiContent,
   promptInputText,
   sanitizeTerminalText,
@@ -137,7 +139,7 @@ describe('AI provider requests', () => {
       expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-provider-key')
       const body = JSON.parse(String(init.body))
       expect(body.model).toBe('test-model')
-      expect(body.stream).toBe(false)
+      expect(body.stream).toBe(true)
       expect(body.messages[0].role).toBe('system')
       expect(body.messages[0].content).toContain('You cannot execute commands')
       expect(body.messages.at(-1)).toEqual({ role: 'user', content: baseRequest.messages[0].content })
@@ -180,6 +182,82 @@ describe('AI provider requests', () => {
       expect(body.model).toBe('claude-test')
       expect(body.system).toContain('You cannot execute commands')
       expect(body.messages.some((message: { role: string }) => message.role === 'system')).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('streams OpenAI-compatible deltas as they arrive', async () => {
+    const profile = testProfile()
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      'key'
+    )
+    const encoder = new TextEncoder()
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"show "}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"interface "}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"ip brief"}}]}\n\n',
+      'data: [DONE]\n\n'
+    ]
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        controller.close()
+      }
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
+    )
+    const deltas: string[] = []
+    try {
+      const result = await new AiService(store).chat(
+        { ...baseRequest, profileId: profile.id },
+        (delta) => deltas.push(delta)
+      )
+      expect(result).toEqual({ ok: true, text: 'show interface ip brief' })
+      expect(deltas.length).toBeGreaterThan(0)
+      expect(deltas.join('')).toBe('show interface ip brief')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('streams Anthropic text deltas', async () => {
+    const profile = testProfile({
+      kind: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      authStyle: 'x-api-key'
+    })
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      'key'
+    )
+    const encoder = new TextEncoder()
+    const chunks = [
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"show "}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"version"}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    ]
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        controller.close()
+      }
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
+    )
+    const deltas: string[] = []
+    try {
+      const result = await new AiService(store).chat(
+        { ...baseRequest, profileId: profile.id },
+        (delta) => deltas.push(delta)
+      )
+      expect(result).toEqual({ ok: true, text: 'show version' })
+      expect(deltas.join('')).toBe('show version')
     } finally {
       vi.unstubAllGlobals()
     }
@@ -429,6 +507,33 @@ describe('AI system prompt', () => {
     expect(prompt).not.toContain('super-secret-output')
     expect(prompt).not.toContain('show run')
   })
+
+  it('still supplies trusted runbook knowledge when live context is off', () => {
+    const prompt = buildSystemPrompt({
+      ...baseRequest,
+      includeContext: false,
+      context: {
+        deviceTypeName: 'Cisco ASA',
+        deviceNotes: ['ASA 9.24'],
+        runbookHints: ['### Interface check\nshow interface ip brief'],
+        terminalTail: 'should-not-appear'
+      }
+    })
+    expect(prompt).toContain('show interface ip brief')
+    expect(prompt).toContain('ASA 9.24')
+    expect(prompt).toContain('Live terminal output was not included')
+    expect(prompt).not.toContain('should-not-appear')
+  })
+
+  it('identifies small models that tend to give generic answers', () => {
+    expect(isSmallModelName('llama3.2')).toBe(true)
+    expect(isSmallModelName('llama3.2:1b')).toBe(true)
+    expect(isSmallModelName('qwen2.5:3b')).toBe(true)
+    expect(isSmallModelName('phi3:mini')).toBe(true)
+    expect(isSmallModelName('qwen2.5:7b')).toBe(false)
+    expect(isSmallModelName('llama3.1:8b')).toBe(false)
+    expect(isSmallModelName('mistral-nemo:12b')).toBe(false)
+  })
 })
 
 describe('AI command parsing', () => {
@@ -492,6 +597,15 @@ describe('AI command parsing', () => {
     expect(analyzeAiCommands(['show run']).stateChanging).toBe(false)
     expect(analyzeAiCommands(['reload in 10']).stateChanging).toBe(true)
     expect(analyzeAiCommands(['write memory']).stateChanging).toBe(true)
+  })
+
+  it('recognizes inline CLI commands from small models', () => {
+    expect(looksLikeCommand('show ip interface brief')).toBe(true)
+    expect(looksLikeCommand('Get-NetAdapter')).toBe(true)
+    expect(looksLikeCommand('sudo tcpdump -i eth0 -c 20')).toBe(true)
+    expect(looksLikeCommand('https://example.com')).toBe(false)
+    expect(looksLikeCommand('just a normal sentence')).toBe(false)
+    expect(looksLikeCommand('show\nversion')).toBe(false)
   })
 
   it('detects text already typed after the prompt', () => {

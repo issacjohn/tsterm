@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type {
   AiChatRequest,
+  AiChatStreamEvent,
   AiLocalStatusRequest,
   AiModelsRequest,
   AiPullModelRequest,
@@ -119,8 +120,11 @@ const api: TstermApi = {
     localStatus: (request: AiLocalStatusRequest) =>
       ipcRenderer.invoke('ai:local-status', request),
     pullModel: (request: AiPullModelRequest) => ipcRenderer.invoke('ai:pull-model', request),
+    installRuntime: () => ipcRenderer.invoke('ai:install-runtime'),
     onPullProgress: (callback: (event: AiPullProgressEvent) => void) =>
       on('ai:pull-progress', callback),
+    onChatStream: (callback: (event: AiChatStreamEvent) => void) =>
+      on('ai:chat-stream', callback),
     saveKey: (profileId: string, key: string) => ipcRenderer.invoke('ai:save-key', profileId, key),
     deleteKey: (profileId: string) => ipcRenderer.invoke('ai:delete-key', profileId),
     keyIds: () => ipcRenderer.invoke('ai:key-ids'),

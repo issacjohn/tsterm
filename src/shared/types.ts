@@ -402,6 +402,12 @@ export type AiChatResult =
   | { ok: true; text: string }
   | { ok: false; error: string; cancelled?: boolean }
 
+export type AiChatStreamEvent = {
+  requestId: string
+  type: 'delta'
+  text: string
+}
+
 export interface AiModelsRequest {
   profile: AiProfile
   apiKey?: string
@@ -450,6 +456,14 @@ export interface AiPullProgressEvent {
   completed?: number
   total?: number
   percent?: number
+}
+
+export interface AiRuntimeInstallResult {
+  ok: boolean
+  version?: string
+  error?: string
+  manual?: boolean
+  downloadUrl?: string
 }
 
 export interface UpdateInfo {
@@ -705,7 +719,9 @@ export interface TstermApi {
     listModels(request: AiModelsRequest): Promise<AiModelsResult>
     localStatus(request: AiLocalStatusRequest): Promise<AiLocalStatusResult>
     pullModel(request: AiPullModelRequest): Promise<AiPullModelResult>
+    installRuntime(): Promise<AiRuntimeInstallResult>
     onPullProgress(callback: (event: AiPullProgressEvent) => void): Unsubscribe
+    onChatStream(callback: (event: AiChatStreamEvent) => void): Unsubscribe
     saveKey(profileId: string, key: string): Promise<string[]>
     deleteKey(profileId: string): Promise<string[]>
     keyIds(): Promise<string[]>

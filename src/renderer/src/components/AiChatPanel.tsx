@@ -18,13 +18,14 @@ import {
   X
 } from 'lucide-react'
 import type { AiChatMessage, AiProfile } from '@shared/types'
-import { isLoopbackUrl } from '@shared/ai-utils'
+import { isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
 import { activePane, useAppStore } from '../store'
 import { saveSettings } from '../lib/session-actions'
 import {
   cancelLocalModelPull,
   ensureLocalModel,
   formatModelBytes,
+  installLocalRuntime,
   localPullStatusLabel,
   useLocalModelState
 } from '../lib/ai-local'
@@ -32,6 +33,7 @@ import {
   analyzeAiCommands,
   collectAiContext,
   fillTerminalPrompt,
+  looksLikeCommand,
   parseAiContent,
   saveCommandsAsSnippet,
   type AiBlock
@@ -57,27 +59,17 @@ function MessageAvatar({ role }: { role: 'user' | 'assistant' }): React.JSX.Elem
   )
 }
 
-function CommandBlock({
-  block,
-  stateChanging
-}: {
-  block: AiBlock
-  stateChanging: boolean
-}): React.JSX.Element {
+function useFillCommand(): (command: string) => void {
   const pane = useAppStore(activePane)
   const notify = useAppStore((state) => state.notify)
-  const sessionId = pane?.status === 'connected' ? pane.sessionId : undefined
-
-  const copyAll = async (): Promise<void> => {
-    const text = block.commands.length ? block.commands.join('\n') : block.code.trim()
-    if (!text) return
-    await window.tsterm.app.copyText(text)
-    notify({ kind: 'success', title: 'Copied', message: 'Review the commands before running them.' })
-  }
-
-  const fill = (command: string): void => {
+  return (command: string): void => {
+    const sessionId = pane?.status === 'connected' ? pane.sessionId : undefined
     if (!sessionId) {
-      notify({ kind: 'warning', title: 'No live session', message: 'Connect a session before filling a command.' })
+      notify({
+        kind: 'warning',
+        title: 'No live session',
+        message: 'Connect a session before filling a command.'
+      })
       return
     }
     const result = fillTerminalPrompt(sessionId, command)
@@ -92,6 +84,27 @@ function CommandBlock({
       duration: 6000
     })
   }
+}
+
+function CommandBlock({
+  block,
+  stateChanging
+}: {
+  block: AiBlock
+  stateChanging: boolean
+}): React.JSX.Element {
+  const pane = useAppStore(activePane)
+  const notify = useAppStore((state) => state.notify)
+  const sessionId = pane?.status === 'connected' ? pane.sessionId : undefined
+  const fill = useFillCommand()
+
+  const copyAll = async (): Promise<void> => {
+    const text = block.commands.length ? block.commands.join('\n') : block.code.trim()
+    if (!text) return
+    await window.tsterm.app.copyText(text)
+    notify({ kind: 'success', title: 'Copied', message: 'Review the commands before running them.' })
+  }
+
 
   const saveSnippet = async (): Promise<void> => {
     try {
@@ -149,7 +162,48 @@ function CommandBlock({
   )
 }
 
-function AssistantMessage({ message }: { message: AiChatMessage }): React.JSX.Element {
+function InlineCommand({ code }: { code: string }): React.JSX.Element {
+  const pane = useAppStore(activePane)
+  const fill = useFillCommand()
+  const connected = pane?.status === 'connected' && Boolean(pane.sessionId)
+  return (
+    <button
+      className="ai-inline-command"
+      disabled={!connected}
+      onClick={() => fill(code)}
+      title={connected ? 'Place this command in the prompt without pressing Enter' : 'Connect a session first'}
+    >
+      <code>{code}</code>
+      <CornerDownLeft size={9} />
+    </button>
+  )
+}
+
+function InlineText({ content }: { content: string }): React.JSX.Element {
+  const parts = content.split(/(`[^`\n]+`)/g)
+  return (
+    <div className="ai-text">
+      {parts.map((part, index) => {
+        if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+          const code = part.slice(1, -1).trim()
+          if (looksLikeCommand(code)) {
+            return <InlineCommand code={code} key={`inline-${index}`} />
+          }
+          return <code key={`code-${index}`}>{code}</code>
+        }
+        return <span key={`text-${index}`}>{part}</span>
+      })}
+    </div>
+  )
+}
+
+function AssistantMessage({
+  message,
+  streaming = false
+}: {
+  message: AiChatMessage
+  streaming?: boolean
+}): React.JSX.Element {
   const segments = parseAiContent(message.content)
   const commands = segments.flatMap((segment) =>
     segment.kind === 'code' ? segment.block.commands : []
@@ -176,9 +230,7 @@ function AssistantMessage({ message }: { message: AiChatMessage }): React.JSX.El
         ) : null}
         {segments.map((segment, index) =>
           segment.kind === 'text' ? (
-            <div className="ai-text" key={`text-${index}`}>
-              {segment.content}
-            </div>
+            <InlineText content={segment.content} key={`text-${index}`} />
           ) : (
             <CommandBlock
               block={segment.block}
@@ -187,6 +239,7 @@ function AssistantMessage({ message }: { message: AiChatMessage }): React.JSX.El
             />
           )
         )}
+        {streaming ? <span className="ai-stream-cursor" aria-hidden="true" /> : null}
       </div>
     </div>
   )
@@ -228,9 +281,11 @@ export function AiChatPanel(): React.JSX.Element {
   const localModel = useLocalModelState()
 
   const [busy, setBusy] = useState(false)
+  const [streamingText, setStreamingText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [contextOn, setContextOn] = useState(settings.aiIncludeContext)
   const requestRef = useRef<string | null>(null)
+  const streamingRef = useRef('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -248,7 +303,10 @@ export function AiChatPanel(): React.JSX.Element {
       ? localModel
       : null
   const localBlocked = Boolean(
-    localState && ['pulling', 'missing', 'error'].includes(localState.phase)
+    localState && ['pulling', 'installing', 'missing', 'error'].includes(localState.phase)
+  )
+  const localNeedsRuntime = Boolean(
+    localState?.status?.ok === false && localState.status.needsRuntime
   )
   const canChat = Boolean(settings.aiEnabled && profile?.model && !localBlocked)
   const needsKey = Boolean(profile && profile.authStyle !== 'none' && !keyIds.includes(profile.id))
@@ -256,6 +314,15 @@ export function AiChatPanel(): React.JSX.Element {
   useEffect(() => {
     setContextOn(settings.aiIncludeContext)
   }, [settings.aiIncludeContext])
+
+  useEffect(() => {
+    const unsubscribe = window.tsterm.ai.onChatStream((event) => {
+      if (!requestRef.current || event.requestId !== requestRef.current) return
+      streamingRef.current += event.text
+      setStreamingText(streamingRef.current)
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (!settings.aiEnabled || !profile?.model || !isLocal) return
@@ -273,7 +340,7 @@ export function AiChatPanel(): React.JSX.Element {
   useEffect(() => {
     const element = scrollRef.current
     if (element) element.scrollTop = element.scrollHeight
-  }, [messages, busy])
+  }, [messages, busy, streamingText])
 
   const toggleContext = (): void => {
     const next = !contextOn
@@ -301,6 +368,8 @@ export function AiChatPanel(): React.JSX.Element {
     const nextMessages: AiChatMessage[] = [...messages, { role: 'user', content: prompt }]
     const requestId = crypto.randomUUID()
     requestRef.current = requestId
+    streamingRef.current = ''
+    setStreamingText('')
     setMessages(nextMessages)
     setDraft('')
     setError(null)
@@ -319,14 +388,28 @@ export function AiChatPanel(): React.JSX.Element {
       if (result.ok) {
         setMessages([...nextMessages, { role: 'assistant', content: result.text }])
       } else if (result.cancelled) {
-        notify({ kind: 'info', title: 'AI request cancelled' })
+        const partial = streamingRef.current.trim()
+        if (partial) {
+          setMessages([...nextMessages, { role: 'assistant', content: partial }])
+        }
+        notify({ kind: 'info', title: 'AI request stopped' })
       } else {
+        const partial = streamingRef.current.trim()
+        if (partial) {
+          setMessages([...nextMessages, { role: 'assistant', content: partial }])
+        }
         setError(result.error)
       }
     } catch (requestError) {
+      const partial = streamingRef.current.trim()
+      if (partial) {
+        setMessages([...nextMessages, { role: 'assistant', content: partial }])
+      }
       setError((requestError as Error).message)
     } finally {
       requestRef.current = null
+      streamingRef.current = ''
+      setStreamingText('')
       setBusy(false)
       requestAnimationFrame(() => inputRef.current?.focus())
     }
@@ -398,10 +481,10 @@ export function AiChatPanel(): React.JSX.Element {
           <button
             className={cx('ai-context-chip', contextOn && 'on')}
             onClick={toggleContext}
-            title={contextOn ? 'Device context is included' : 'Device context is not included'}
+            title={contextOn ? 'Live terminal output is included' : 'Live terminal output is not included'}
           >
             {contextOn ? <Eye size={11} /> : <EyeOff size={11} />}
-            {contextOn ? 'Context on' : 'Context off'}
+            {contextOn ? 'Live context on' : 'Live context off'}
           </button>
           <button
             className="icon-btn tiny"
@@ -426,12 +509,37 @@ export function AiChatPanel(): React.JSX.Element {
         )}
       </div>
 
+      {profile && isSmallModelName(profile.model) ? (
+        <div className="ai-model-quality-banner">
+          <ShieldCheck size={12} />
+          <span>
+            <strong>{profile.model}</strong> is a small model and may give generic answers.
+          </span>
+          <button
+            className="btn btn-ghost btn-xs"
+            onClick={() => setModal({ kind: 'settings', tab: 'ai' })}
+          >
+            Switch model
+          </button>
+        </div>
+      ) : null}
+
       {isLocal && localState && localState.phase === 'checking' ? (
         <div className="ai-local-banner checking">
           <Loader2 size={14} className="spin" />
           <div className="ai-local-banner-copy">
             <strong>Checking the local model</strong>
             <span>Looking for Ollama and {profile?.model}.</span>
+          </div>
+        </div>
+      ) : null}
+
+      {isLocal && localState && localState.phase === 'installing' ? (
+        <div className="ai-local-banner installing">
+          <Loader2 size={14} className="spin" />
+          <div className="ai-local-banner-copy">
+            <strong>Installing Ollama</strong>
+            <span>Downloading and running the official Ollama installer. This can take a few minutes.</span>
           </div>
         </div>
       ) : null}
@@ -471,24 +579,42 @@ export function AiChatPanel(): React.JSX.Element {
             <strong>
               {localState.phase === 'error'
                 ? 'Local model download failed'
-                : 'Local model is not installed'}
+                : localNeedsRuntime
+                  ? 'Ollama is not available'
+                  : 'Local model is not installed'}
             </strong>
             <span>{localState.error || `${profile?.model} needs to be downloaded.`}</span>
           </div>
-          <button
-            className="btn btn-primary btn-xs"
-            onClick={() => profile && void ensureLocalModel(profile, { autoPull: true, force: true })}
-          >
-            <Download size={11} /> Download
-          </button>
-          {localState.status?.ok === false && localState.status.needsRuntime ? (
+          {localNeedsRuntime ? (
+            <>
+              <button
+                className="btn btn-primary btn-xs"
+                onClick={() =>
+                  profile &&
+                  void installLocalRuntime(profile, {
+                    autoPull: settings.aiAutoPullLocalModels
+                  })
+                }
+              >
+                <Download size={11} /> Install Ollama
+              </button>
+              <button
+                className="btn btn-ghost btn-xs"
+                onClick={() => profile && void ensureLocalModel(profile, { autoPull: true, force: true })}
+              >
+                Retry
+              </button>
+            </>
+          ) : (
             <button
-              className="btn btn-ghost btn-xs"
-              onClick={() => void window.tsterm.app.openExternal('https://ollama.com/download')}
+              className="btn btn-primary btn-xs"
+              onClick={() =>
+                profile && void ensureLocalModel(profile, { autoPull: true, force: true })
+              }
             >
-              Get Ollama
+              <Download size={11} /> Download
             </button>
-          ) : null}
+          )}
         </div>
       ) : null}
 
@@ -535,7 +661,12 @@ export function AiChatPanel(): React.JSX.Element {
           )
         )}
 
-        {busy ? (
+        {busy && streamingText ? (
+          <AssistantMessage
+            message={{ role: 'assistant', content: streamingText }}
+            streaming
+          />
+        ) : busy ? (
           <div className="ai-message assistant">
             <MessageAvatar role="assistant" />
             <div className="ai-message-body">
@@ -567,9 +698,13 @@ export function AiChatPanel(): React.JSX.Element {
           placeholder={
             canChat
               ? 'Describe the symptom or ask what to check…'
-              : localBlocked
-                ? 'Waiting for the local model to finish installing…'
-                : 'Choose a provider and model first'
+              : localState?.phase === 'installing'
+                ? 'Installing Ollama…'
+                : localNeedsRuntime
+                  ? 'Install Ollama, then retry.'
+                  : localBlocked
+                    ? 'Download the local model first.'
+                    : 'Choose a provider and model first'
           }
           disabled={!canChat}
           onChange={(event) => setDraft(event.target.value)}
