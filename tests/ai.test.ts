@@ -13,12 +13,30 @@ import {
 import type { Store } from '../src/main/store'
 import type { AiChatRequest } from '../src/shared/types'
 
-function fakeStore(overrides: { aiEnabled: boolean }): Store {
+function fakeStore(
+  overrides: { aiEnabled: boolean; aiProfiles?: unknown[]; aiActiveProfileId?: string },
+  key?: string
+): Store {
   const settings = { ...structuredClone(DEFAULT_SETTINGS), ...overrides }
   return {
     getSettings: () => structuredClone(settings),
-    getAiKey: () => undefined
+    getAiKey: () => key
   } as unknown as Store
+}
+
+function testProfile(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'test-provider',
+    name: 'Test provider',
+    kind: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    model: 'test-model',
+    authStyle: 'bearer',
+    maxTokens: 512,
+    temperature: 0.2,
+    local: false,
+    ...overrides
+  }
 }
 
 const baseRequest: AiChatRequest = {
@@ -78,6 +96,101 @@ describe('AI request boundary', () => {
       'BrowserWindow'
     ]) {
       expect(source).not.toContain(forbidden)
+    }
+  })
+})
+
+describe('AI provider requests', () => {
+  it('builds an OpenAI-compatible request with bearer auth', async () => {
+    const profile = testProfile()
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      'sk-provider-key'
+    )
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'check the interface' } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const result = await new AiService(store).chat({
+        ...baseRequest,
+        profileId: profile.id,
+        includeContext: false
+      })
+      expect(result).toEqual({ ok: true, text: 'check the interface' })
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toBe('https://api.example.com/v1/chat/completions')
+      expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-provider-key')
+      const body = JSON.parse(String(init.body))
+      expect(body.model).toBe('test-model')
+      expect(body.stream).toBe(false)
+      expect(body.messages[0].role).toBe('system')
+      expect(body.messages[0].content).toContain('You cannot execute commands')
+      expect(body.messages.at(-1)).toEqual({ role: 'user', content: baseRequest.messages[0].content })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('builds an Anthropic messages request with x-api-key auth', async () => {
+    const profile = testProfile({
+      kind: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-test',
+      authStyle: 'x-api-key'
+    })
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      'anthropic-key'
+    )
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ content: [{ type: 'text', text: 'check the route' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const result = await new AiService(store).chat({
+        ...baseRequest,
+        profileId: profile.id,
+        includeContext: false
+      })
+      expect(result).toEqual({ ok: true, text: 'check the route' })
+      const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toBe('https://api.anthropic.com/v1/messages')
+      const headers = init.headers as Record<string, string>
+      expect(headers['x-api-key']).toBe('anthropic-key')
+      expect(headers['anthropic-version']).toBe('2023-06-01')
+      const body = JSON.parse(String(init.body))
+      expect(body.model).toBe('claude-test')
+      expect(body.system).toContain('You cannot execute commands')
+      expect(body.messages.some((message: { role: string }) => message.role === 'system')).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('accepts a pasted full completion URL without doubling the path', async () => {
+    const profile = testProfile({ baseUrl: 'https://api.example.com/v1/chat/completions' })
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      'key'
+    )
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      await new AiService(store).chat({ ...baseRequest, profileId: profile.id })
+      const [url] = fetchSpy.mock.calls[0] as unknown as [string]
+      expect(url).toBe('https://api.example.com/v1/chat/completions')
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })

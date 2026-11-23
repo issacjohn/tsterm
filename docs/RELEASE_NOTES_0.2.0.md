@@ -46,13 +46,13 @@ Every fill shows: “Nothing was executed. Review it and press Enter yourself.�
 - `Ctrl/Cmd + Shift + A` opens the assistant or the AI setup page.
 - Assistant action in the command palette and Session menu.
 - Provider editor with Local/Remote status, temperature, max tokens, and model discovery.
-- New tests: 44 unit tests, plus an end-to-end AI smoke test against a loopback mock model.
+- New tests: 47 unit tests, plus an end-to-end AI smoke test against a loopback mock model.
 - The existing 13 device packs / 236 runbooks are unchanged.
 
 ## Verification
 
 - `npm run typecheck`
-- `npm test` — 44 tests across catalog, suggestions, updates, AI parsing/redaction, the AI execution
+- `npm test` — 47 tests across catalog, suggestions, updates, AI parsing/redaction, the AI execution
   boundary, and settings/key migration.
 - `npm run build`
 - `npm run test:ai` — enables the assistant, saves a key, fetches models, sends a chat request to a local
