@@ -11,6 +11,7 @@ import {
   saveSettings
 } from './lib/session-actions'
 import { terminalDataBus } from './lib/terminal-bus'
+import { initAiChatStreaming } from './lib/ai-chat'
 import { TopBar } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
 import { TabStrip } from './components/TabStrip'
@@ -58,6 +59,8 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     let disposed = false
     const unsubscribers: Array<() => void> = []
+
+    unsubscribers.push(initAiChatStreaming())
 
     unsubscribers.push(
       window.tsterm.terminals.onData((event) => {

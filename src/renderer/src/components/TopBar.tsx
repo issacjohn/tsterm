@@ -1,6 +1,16 @@
-import { Command, PanelLeft, Settings, ShieldAlert, Sparkles, TerminalSquare } from 'lucide-react'
+import { useState } from 'react'
+import {
+  Command,
+  PanelLeft,
+  RefreshCw,
+  Settings,
+  ShieldAlert,
+  Sparkles,
+  TerminalSquare
+} from 'lucide-react'
 import { useAppStore } from '../store'
-import { modifierLabel } from '../lib/format'
+import { checkForUpdates } from '../lib/updates'
+import { cx, modifierLabel } from '../lib/format'
 import { Logo } from './ui/Logo'
 
 interface TopBarProps {
@@ -19,11 +29,22 @@ export function TopBar({
   const debugSessions = useAppStore((state) => state.debugSessions)
   const tabs = useAppStore((state) => state.tabs)
   const platform = useAppStore((state) => state.appPlatform)
+  const appVersion = useAppStore((state) => state.bootstrap?.appVersion ?? '0.0.0')
+  const [checking, setChecking] = useState(false)
   const connected = tabs.reduce(
     (count, tab) => count + tab.panes.filter((pane) => pane.status === 'connected').length,
     0
   )
   const mod = modifierLabel(platform)
+
+  const checkUpdates = async (): Promise<void> => {
+    setChecking(true)
+    try {
+      await checkForUpdates(true)
+    } finally {
+      setChecking(false)
+    }
+  }
 
   return (
     <header className="topbar">
@@ -65,6 +86,18 @@ export function TopBar({
           </button>
         )}
 
+        <div className="topbar-version" title={`TSTerm version ${appVersion}`}>
+          <span>v{appVersion}</span>
+          <button
+            className="icon-btn tiny"
+            onClick={() => void checkUpdates()}
+            disabled={checking}
+            title="Check for updates"
+            aria-label="Check for updates"
+          >
+            <RefreshCw size={12} className={cx(checking && 'spin')} />
+          </button>
+        </div>
         <button className="icon-btn" onClick={onToggleSidebar} title="Toggle sidebar">
           <PanelLeft size={18} />
         </button>

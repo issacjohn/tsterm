@@ -86,6 +86,18 @@ const server = http.createServer(async (request, response) => {
     return json(response, 200, { data: [{ id: MODEL }] })
   }
 
+  if (request.method === 'POST' && request.url === '/api/chat') {
+    chatCalls += 1
+    chatBody = JSON.parse(await readBody(request))
+    response.writeHead(200, { 'Content-Type': 'application/x-ndjson' })
+    response.write(
+      `${JSON.stringify({ message: { role: 'assistant', content: REPLY }, done: false })}\n`
+    )
+    response.write(`${JSON.stringify({ done: true })}\n`)
+    response.end()
+    return
+  }
+
   if (request.method === 'POST' && request.url === '/v1/chat/completions') {
     chatCalls += 1
     chatBody = JSON.parse(await readBody(request))
@@ -180,6 +192,9 @@ try {
 
   if (chatCalls !== 1) throw new Error(`Expected one chat request, got ${chatCalls}.`)
   if (chatBody?.model !== MODEL) throw new Error(`Wrong model used: ${chatBody?.model}`)
+  if (chatBody?.options?.num_ctx !== 16384) {
+    throw new Error(`Expected the native Ollama context window, got ${chatBody?.options?.num_ctx}`)
+  }
   if (!String(chatBody?.messages?.[0]?.content).includes('You cannot execute commands')) {
     throw new Error('The chat request lost the execution ban.')
   }

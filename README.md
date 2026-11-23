@@ -7,7 +7,8 @@ turns a protocol into a safe, complete runbook, and makes sure the debugs and pa
 cleaned up before you walk away.
 
 It is built for the messy middle of an incident: the part where you know *what* is wrong but still need the
-exact ASA, IOS-XE, NX-OS, PAN-OS, PowerShell, or shell command that gets you the next piece of evidence.
+exact Cisco ASA command that gets you the next piece of evidence. This build focuses on ASA; other device
+packs are archived and will return one at a time after validation.
 
 ![TSTerm welcome](screenshots/01-welcome.png)
 
@@ -37,23 +38,13 @@ No browser tabs full of half-remembered commands. No forgotten `undebug all` at 
 
 ### Device-aware runbooks
 
-The bundled catalog contains **13 device packs and 236 runbooks**, covering:
+The bundled catalog currently contains **Cisco ASA only: 77 runbooks across 14 categories**. The other
+packs are kept in `catalog-archive/` and are being validated one at a time before they return to the
+installer.
 
 | Platform | What is covered |
 | --- | --- |
 | Cisco ASA | **77 runbooks** — VPN, AnyConnect, IKEv1/IKEv2/IPsec, RADIUS/TACACS+/LDAP/User-ID, captures (host, subnet, ACL, ASP drop, decrypted), NAT, OSPF/EIGRP/BGP/multicast/IPv6, failover and clustering, licenses, logging, threat detection, and more |
-| Cisco IOS / IOS-XE | EPC captures, BGP/OSPF/EIGRP, RADIUS/TACACS+, IPsec/DMVPN, NAT, STP, multicast, health |
-| Cisco Nexus | Ethanalyzer, vPC, port-channels/LACP, BGP/OSPF, AAA, FEX, STP, multicast, NAT |
-| Cisco FTD | FMC capture, diagnostic CLI, packet-tracer, connections, VPN, AAA, deployment, expert mode |
-| Cisco FMC | Health, disk, deployment tasks, registration, backups, licensing, updates, time |
-| Cisco AireOS WLC | Clients, AAA/RADIUS, AP join, CAPWAP, roaming, RF, controller health |
-| Catalyst 9800 | Wireless client, RADIUS, AP join, CAPWAP, roaming, RF, WLAN — plus the IOS-XE base set |
-| Cisco Meraki | Dashboard workflows and read-only API calls |
-| Palo Alto PAN-OS | Packet-diag capture, policy/NAT/fib tests, sessions, VPN, User-ID, counters, HA |
-| Windows | PowerShell networking, DNS, pktmon, ports, firewall, VPN, Wi-Fi, proxy, TLS, event logs |
-| Linux | iproute2, DNS, tcpdump, sockets, nftables/iptables/firewalld, NetworkManager, bonding, logs |
-| macOS | ifconfig/scutil/networksetup, tcpdump, PF, VPN, Wi-Fi, proxy, unified logs, routes |
-| Generic network device | A safe starting point for anything not in the library yet |
 
 Every workflow can carry variables, required inputs, validation, instructions, notes, verification steps,
 and **cleanup commands**. Debug and capture workflows are not allowed to load without cleanup.
@@ -84,8 +75,16 @@ recommended local model for network CLI work; 1B–3B models are often generic, 
 selected. Device type and matching runbooks are always sent to the model; live terminal lines remain
 opt-in.
 
-The AI is **scoped to the active device pack**. An ASA session receives ASA runbooks only; a Windows
-terminal receives Windows runbooks only. Other packs are excluded from the prompt.
+The AI is **scoped to the active device pack**. An ASA session receives ASA runbooks only; other packs are
+excluded from the prompt. This build ships the ASA pack only, so a local terminal has no vendor runbooks
+until another pack is restored.
+
+Every terminal keeps its **own AI conversation**. Messages, drafts, errors, and an in-flight streamed answer
+belong to that terminal's tab. Switch to another device and the new tab starts with a clean thread; switch
+back and the previous conversation and draft are exactly where you left them. Replies that finish while you
+are on another tab are delivered to the correct thread. Closing a tab clears that terminal's thread.
+Ollama reuses the loaded model across threads, so separate conversations do not reload or duplicate the
+model in VRAM.
 
 ### Reference library
 
@@ -158,7 +157,8 @@ See [docs/DEVICE_PACKS.md](docs/DEVICE_PACKS.md) for the format and a full examp
 
 ![Update check](screenshots/20-update-check.png)
 
-TSTerm checks the public GitHub release feed **once a day** on launch. You can also check manually from
+TSTerm checks the public GitHub release feed **once a day** on launch. The current version is always
+visible in the top bar next to a quick **Check for updates** button; the same check is available in
 Settings → About. If a newer version exists, you can download it, skip that version, or turn automatic
 checks off. Nothing is installed without you.
 
@@ -323,6 +323,9 @@ npm run test:ai-runtime
 
 # Verifies ASA-only runbook scope and imported reference retrieval
 npm run test:ai-reference
+
+# Verifies separate per-terminal conversations, drafts, and background completion
+npm run test:ai-threads
 
 # Requires Ollama plus qwen2.5:7b; sends a real streaming prompt through TSTerm
 npm run test:ai-ollama

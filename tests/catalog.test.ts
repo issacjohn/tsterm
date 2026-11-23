@@ -27,31 +27,8 @@ describe('bundled catalog', () => {
     expect(errors).toHaveLength(0)
   })
 
-  it('has the expected device families', () => {
-    expect(bundle.types.length).toBeGreaterThanOrEqual(11)
-    const ids = bundle.types.map((type) => type.id)
-    expect(ids).toEqual(
-      expect.arrayContaining([
-        'cisco-asa',
-        'cisco-ios',
-        'cisco-nxos',
-        'cisco-ftd',
-        'cisco-fmc',
-        'cisco-wlc-aireos',
-        'cisco-meraki',
-        'paloalto-panos',
-        'windows',
-        'linux',
-        'macos'
-      ])
-    )
-  })
-
-  it('inherits IOS workflows into the 9800 pack', () => {
-    const type = bundle.types.find((item) => item.id === 'cisco-9800')
-    expect(type).toBeTruthy()
-    expect(type!.workflows.some((workflow) => workflow.id === 'epc-host')).toBe(true)
-    expect(type!.workflows.some((workflow) => workflow.id === 'wlc-client-detail')).toBe(true)
+  it('ships only the CISCO ASA pack for now', () => {
+    expect(bundle.types.map((type) => type.id)).toEqual(['cisco-asa'])
   })
 
   it('searches across names, keywords, and commands', () => {
@@ -73,23 +50,6 @@ describe('bundled catalog', () => {
     expect(runbookCleanupCommands(runbook)).toContain('undebug radius all')
   })
 
-  it('renders conditional windows without an empty optional argument', () => {
-    const windows = bundle.types.find((type) => type.id === 'windows')!
-    const workflow = windows.workflows.find((item) => item.id === 'dns-check')!
-    const withoutServer = buildRunbook(workflow, {
-      name: 'example.com',
-      dns_server: ''
-    })
-    expect(withoutServer.primary.map((step) => step.command)).not.toContain(
-      'Resolve-DnsName example.com -Server '
-    )
-    const withServer = buildRunbook(workflow, {
-      name: 'example.com',
-      dns_server: '1.1.1.1'
-    })
-    expect(withServer.primary.some((step) => step.command === 'Resolve-DnsName example.com -Server 1.1.1.1')).toBe(true)
-  })
-
   it('requires cleanup on debug and capture workflows', () => {
     for (const type of bundle.types) {
       for (const workflow of type.workflows) {
@@ -109,7 +69,7 @@ describe('bundled catalog', () => {
     expect(asa.workflows.some((workflow) => workflow.id === 'license-status')).toBe(true)
     expect(asa.workflows.some((workflow) => workflow.id === 'tech-support')).toBe(true)
     const total = bundle.types.reduce((count, type) => count + type.workflows.length, 0)
-    expect(total).toBe(236)
+    expect(total).toBe(77)
   })
 
   it('uses the ASA capture syntax verified on the lab device', () => {

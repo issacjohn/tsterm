@@ -1,7 +1,7 @@
 {
   "name": "tsterm",
   "productName": "TSTerm",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A desktop troubleshooting console with SSH, local shells, device-aware runbooks, inline prediction, a debug guard, and an optional AI assistant that can never run commands.",
   "main": "./out/main/index.js",
   "author": "Issac John",
@@ -29,6 +29,7 @@
     "test:ai-local": "node scripts/ai-local-smoke.mjs",
     "test:ai-runtime": "node scripts/ai-runtime-missing-smoke.mjs",
     "test:ai-reference": "node scripts/ai-reference-smoke.mjs",
+    "test:ai-threads": "node scripts/ai-threads-smoke.mjs",
     "test:ai-ollama": "node scripts/ai-ollama-smoke.mjs",
     "test:debug-guard": "node scripts/ui-debug-close.mjs",
     "test:update": "node scripts/update-smoke.mjs",

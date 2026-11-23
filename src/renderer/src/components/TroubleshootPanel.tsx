@@ -54,7 +54,7 @@ function WorkflowDetail({ type, workflow, onBack }: DetailProps): React.JSX.Elem
   const notify = useAppStore((state) => state.notify)
   const setModal = useAppStore((state) => state.setModal)
   const aiEnabled = useAppStore((state) => state.settings.aiEnabled)
-  const setAiDraft = useAppStore((state) => state.setAiDraft)
+  const setAiThread = useAppStore((state) => state.setAiThread)
   const setTroubleshootTab = useAppStore((state) => state.setTroubleshootTab)
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(workflow))
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -94,9 +94,11 @@ function WorkflowDetail({ type, workflow, onBack }: DetailProps): React.JSX.Elem
       setModal({ kind: 'settings', tab: 'ai' })
       return
     }
-    setAiDraft(
-      `Review the "${workflow.title}" runbook for ${host?.label ?? pane?.title ?? 'this device'}. What should I verify before and after, what would prove the cause, and is any cleanup missing?`
-    )
+    if (pane) {
+      setAiThread(pane.id, {
+        draft: `Review the "${workflow.title}" runbook for ${host?.label ?? pane.title ?? 'this device'}. What should I verify before and after, what would prove the cause, and is any cleanup missing?`
+      })
+    }
     setTroubleshootTab('assistant')
   }
 

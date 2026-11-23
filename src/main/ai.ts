@@ -12,6 +12,7 @@ import type {
   AiPullProgressEvent
 } from '@shared/types'
 import { isLoopbackUrl } from '@shared/ai-utils'
+import { buildAsaCommandIndex } from '@shared/asa-commands'
 import type { Store } from './store'
 
 const MAX_CONTEXT_CHARS = 7000
@@ -62,6 +63,17 @@ function ollamaBase(profile: AiProfile): string {
     .replace(/\/models$/i, '')
     .replace(/\/v1$/i, '')
   return `${parsed.protocol}//${parsed.host}${pathname}`
+}
+
+function isOllamaProfile(profile: AiProfile): boolean {
+  if (!isLoopbackUrl(profile.baseUrl)) return false
+  try {
+    const url = new URL(profile.baseUrl)
+    if (url.port === '11434') return true
+  } catch {
+    // validated later by ollamaBase
+  }
+  return /ollama/i.test(profile.id) || /ollama/i.test(profile.name)
 }
 
 function validateModelName(value: string): string {
@@ -115,7 +127,7 @@ function cleanMessagesForProvider(
 
 async function readStreamedText(
   body: ReadableStream<Uint8Array>,
-  mode: 'openai-compatible' | 'anthropic',
+  mode: 'openai-compatible' | 'anthropic' | 'ollama',
   onDelta?: (text: string) => void
 ): Promise<string> {
   const reader = body.getReader()
@@ -144,6 +156,8 @@ async function readStreamedText(
       }>
       type?: string
       delta?: { type?: string; text?: string }
+      message?: { content?: string }
+      done?: boolean
     }
     try {
       payload = JSON.parse(data)
@@ -158,7 +172,9 @@ async function readStreamedText(
       )
     }
     let chunk = ''
-    if (mode === 'anthropic') {
+    if (mode === 'ollama') {
+      if (typeof payload.message?.content === 'string') chunk = payload.message.content
+    } else if (mode === 'anthropic') {
       if (payload.type === 'content_block_delta' && typeof payload.delta?.text === 'string') {
         chunk = payload.delta.text
       }
@@ -230,6 +246,7 @@ export function buildSystemPrompt(request: AiChatRequest): string {
     : 'Live terminal output was not included by the user.'
 
   const activePack = context.deviceTypeName?.trim()
+  const asaIndex = /asa/i.test(activePack ?? '') ? buildAsaCommandIndex() : ''
   return [
     'You are TSTerm AI, a senior network and systems troubleshooting engineer inside a desktop terminal.',
     '',
@@ -258,6 +275,11 @@ export function buildSystemPrompt(request: AiChatRequest): string {
     '9. Match the user\'s language. Be concise and practical. Do not pad the answer with generic networking theory.',
     '10. Never invent optional keywords or timer options. If you are not certain a keyword exists, use a simpler command from the runbook context and say what you are unsure about.',
     '    Cisco ASA example: capture has no duration keyword. Bound it with buffer/circular-buffer and remove it with no capture <name>.',
+    '11. Cisco ASA capture syntax is strict. Valid forms are:',
+    '    capture TSTCAP interface inside match ip host 1.1.1.1 host 8.8.8.8',
+    '    capture TSTCAP interface inside match ip 1.1.1.1 0.0.0.0 8.8.8.8 0.0.0.0',
+    '    capture TSTCAP interface inside match tcp host 1.1.1.1 eq 53 host 8.8.8.8 eq 53',
+    '    Never use source, destination, src, or dst keywords, and never append bare port numbers. Always finish with no capture TSTCAP.',
     '',
     'Answer structure:',
     '- Start with the most likely cause and your confidence.',
@@ -277,6 +299,8 @@ export function buildSystemPrompt(request: AiChatRequest): string {
     '',
     'Runbook context:',
     runbookContext,
+    '',
+    asaIndex,
     '',
     referenceContext,
     '',
@@ -582,6 +606,7 @@ export class AiService {
       })
       let url: string
       let payload: Record<string, unknown>
+      const ollama = profile.kind === 'openai-compatible' && isOllamaProfile(profile)
       if (profile.kind === 'anthropic') {
         headers['anthropic-version'] = '2023-06-01'
         url = `${anthropicBase(profile)}/messages`
@@ -592,6 +617,18 @@ export class AiService {
           max_tokens: profile.maxTokens,
           temperature: profile.temperature,
           stream: true
+        }
+      } else if (ollama) {
+        url = `${ollamaBase(profile)}/api/chat`
+        payload = {
+          model: profile.model,
+          messages: [{ role: 'system', content: system }, ...messages],
+          stream: true,
+          options: {
+            temperature: profile.temperature,
+            num_predict: profile.maxTokens,
+            num_ctx: 16384
+          }
         }
       } else {
         url = `${openAiBase(profile)}/chat/completions`
@@ -632,14 +669,21 @@ export class AiService {
       const contentType = response.headers.get('content-type') ?? ''
       let text = ''
       if (response.body && !contentType.includes('application/json')) {
-        text = await readStreamedText(response.body, profile.kind, onDelta)
+        text = await readStreamedText(
+          response.body,
+          ollama ? 'ollama' : profile.kind,
+          onDelta
+        )
       } else {
         const raw = await response.text()
         const data = JSON.parse(raw) as {
           choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>
           content?: Array<{ type?: string; text?: string }>
+          message?: { content?: string }
         }
-        if (profile.kind === 'anthropic') {
+        if (ollama) {
+          text = typeof data.message?.content === 'string' ? data.message.content : ''
+        } else if (profile.kind === 'anthropic') {
           text = (data.content ?? [])
             .filter((part) => part.type === 'text' && part.text)
             .map((part) => part.text)

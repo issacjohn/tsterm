@@ -1422,6 +1422,17 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                     >
                       <FolderOpen size={13} /> Open folder
                     </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        void window.tsterm.app.openExternal(
+                          'https://www.cisco.com/c/en/us/support/security/adaptive-security-appliance-asa-software/products-command-reference-list.html'
+                        )
+                      }
+                      title="Open Cisco's ASA command reference"
+                    >
+                      <ExternalLink size={13} /> Cisco docs
+                    </button>
                   </div>
                   {referenceError ? <div className="ai-inline-error">{referenceError}</div> : null}
                   {referenceDocs.length ? (

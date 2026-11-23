@@ -1,6 +1,9 @@
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { AiService, buildSystemPrompt } from '../src/main/ai'
+import { CatalogService } from '../src/main/catalog'
 import { DEFAULT_SETTINGS } from '../src/shared/themes'
 import {
   analyzeAiCommands,
@@ -15,7 +18,8 @@ import {
   toFillableCommand
 } from '../src/shared/ai-utils'
 import type { Store } from '../src/main/store'
-import type { AiChatRequest, AiProfile } from '../src/shared/types'
+import { buildRunbookHints } from '../src/shared/ai-knowledge'
+import type { AiChatRequest, AiProfile, DeviceType } from '../src/shared/types'
 
 function fakeStore(
   overrides: { aiEnabled: boolean; aiProfiles?: unknown[]; aiActiveProfileId?: string },
@@ -220,6 +224,55 @@ describe('AI provider requests', () => {
       expect(result).toEqual({ ok: true, text: 'show interface ip brief' })
       expect(deltas.length).toBeGreaterThan(0)
       expect(deltas.join('')).toBe('show interface ip brief')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('uses native Ollama chat with a larger context window', async () => {
+    const profile = testProfile({
+      id: 'local-ollama',
+      name: 'Ollama (local)',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'qwen2.5:7b',
+      authStyle: 'none',
+      local: true
+    })
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      undefined
+    )
+    const encoder = new TextEncoder()
+    const chunks = [
+      '{"message":{"role":"assistant","content":"show "},"done":false}\n',
+      '{"message":{"role":"assistant","content":"ip interface brief"},"done":false}\n',
+      '{"done":true}\n'
+    ]
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        controller.close()
+      }
+    })
+    const fetchSpy = vi.fn(
+      async () => new Response(body, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } })
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    const deltas: string[] = []
+    try {
+      const result = await new AiService(store).chat(
+        { ...baseRequest, profileId: profile.id },
+        (delta) => deltas.push(delta)
+      )
+      expect(result).toEqual({ ok: true, text: 'show ip interface brief' })
+      expect(deltas.join('')).toBe('show ip interface brief')
+      const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toBe('http://127.0.0.1:11434/api/chat')
+      const payload = JSON.parse(String(init.body))
+      expect(payload.options.num_ctx).toBe(16384)
+      expect(payload.options.num_predict).toBe(profile.maxTokens)
+      expect(payload.messages[0].role).toBe('system')
+      expect(payload.messages[0].content).toContain('You cannot execute commands')
     } finally {
       vi.unstubAllGlobals()
     }
@@ -499,8 +552,20 @@ describe('AI system prompt', () => {
     expect(prompt).toContain('cleanup')
     expect(prompt).toContain('capture has no duration keyword')
     expect(prompt).toContain('no capture <name>')
+    expect(prompt).toContain('Top-level ASA commands')
+    expect(prompt).toContain('packet-tracer')
+    expect(prompt).toContain('Never use source, destination')
+    expect(prompt).toContain('match ip 1.1.1.1 0.0.0.0 8.8.8.8 0.0.0.0')
     expect(prompt).toContain('active device pack is Cisco ASA')
     expect(prompt).toContain('Never mention commands from another platform')
+  })
+
+  it('does not inject the ASA command index into other platforms', () => {
+    const prompt = buildSystemPrompt({
+      ...baseRequest,
+      context: { deviceTypeName: 'Windows', vendor: 'Microsoft', family: 'Windows' }
+    })
+    expect(prompt).not.toContain('Top-level ASA commands')
   })
 
   it('includes user-imported reference excerpts as reference data', () => {
@@ -648,6 +713,28 @@ describe('AI command parsing', () => {
     expect(promptInputText('ciscoasa/act# show')).toBe('show')
     expect(promptInputText('user@host:~$ rm -')).toBe('rm -')
     expect(promptInputText('show run')).toBe('show run')
+  })
+})
+
+describe('runbook retrieval', () => {
+  const custom = fs.mkdtempSync(path.join(os.tmpdir(), 'tsterm-ai-catalog-'))
+  const asa = new CatalogService(path.resolve('resources/catalog'), custom)
+    .load()
+    .types.find((type) => type.id === 'cisco-asa') as DeviceType
+
+  it('still finds capture runbooks when the question contains IPs and ports', () => {
+    const hints = buildRunbookHints(
+      asa,
+      'capture TSTCAP interface inside source 1.1.1.1 53 8.8.8.8 53'
+    ).join('\n')
+    expect(hints).toContain('match ip host')
+    expect(hints).toContain('no capture TSTCAP')
+  })
+
+  it('scopes hints to the supplied pack only', () => {
+    const hints = buildRunbookHints(asa, 'packet capture inside interface').join('\n')
+    expect(hints.length).toBeGreaterThan(0)
+    expect(hints).not.toContain('Get-NetAdapter')
   })
 })
 

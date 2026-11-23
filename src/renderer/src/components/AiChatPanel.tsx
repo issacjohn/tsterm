@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpen,
   Bot,
   Check,
@@ -20,8 +21,9 @@ import {
 } from 'lucide-react'
 import type { AiChatMessage, AiProfile } from '@shared/types'
 import { isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
-import { activePane, useAppStore } from '../store'
+import { activePane, EMPTY_AI_THREAD, useAppStore } from '../store'
 import { saveSettings } from '../lib/session-actions'
+import { cancelAiMessage, clearAiThread, sendAiMessage } from '../lib/ai-chat'
 import {
   cancelLocalModelPull,
   ensureLocalModel,
@@ -32,7 +34,6 @@ import {
 } from '../lib/ai-local'
 import {
   analyzeAiCommands,
-  collectAiContext,
   extractInlineCommands,
   fillTerminalPrompt,
   looksLikeCommand,
@@ -212,7 +213,7 @@ function AssistantMessage({
       ? segment.block.commands
       : extractInlineCommands(segment.content)
   )
-  const { startsDebugOrCapture, hasCleanup } = analyzeAiCommands(commands)
+  const { startsDebugOrCapture, hasCleanup, captureWarnings } = analyzeAiCommands(commands)
 
   return (
     <div className="ai-message assistant">
@@ -230,6 +231,17 @@ function AssistantMessage({
                 ? 'A cleanup command is included in this answer. Still review both sides.'
                 : 'No cleanup command found for the debug/capture in this answer. Do not run it until you have a stop command.'}
             </span>
+          </div>
+        ) : null}
+        {captureWarnings.length ? (
+          <div className="ai-capture-warning">
+            <AlertTriangle size={13} />
+            <div>
+              <strong>Check this ASA capture syntax</strong>
+              {captureWarnings.map((warning) => (
+                <span key={warning}>{warning}</span>
+              ))}
+            </div>
           </div>
         ) : null}
         {segments.map((segment, index) =>
@@ -276,21 +288,16 @@ export function AiChatPanel(): React.JSX.Element {
   const catalog = useAppStore((state) => state.catalog)
   const keyIds = useAppStore((state) => state.aiKeyIds)
   const referenceDocs = useAppStore((state) => state.referenceDocs)
-  const messages = useAppStore((state) => state.aiMessages)
-  const draft = useAppStore((state) => state.aiDraft)
-  const setMessages = useAppStore((state) => state.setAiMessages)
-  const setDraft = useAppStore((state) => state.setAiDraft)
-  const clearChat = useAppStore((state) => state.clearAiChat)
+  const paneKey = pane?.id ?? ''
+  const thread = useAppStore((state) =>
+    paneKey ? state.aiThreads[paneKey] : undefined
+  ) ?? EMPTY_AI_THREAD
+  const setAiThread = useAppStore((state) => state.setAiThread)
   const setModal = useAppStore((state) => state.setModal)
-  const notify = useAppStore((state) => state.notify)
   const localModel = useLocalModelState()
 
-  const [busy, setBusy] = useState(false)
-  const [streamingText, setStreamingText] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const { messages, draft, busy, streamingText, error } = thread
   const [contextOn, setContextOn] = useState(settings.aiIncludeContext)
-  const requestRef = useRef<string | null>(null)
-  const streamingRef = useRef('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -325,15 +332,6 @@ export function AiChatPanel(): React.JSX.Element {
   }, [settings.aiIncludeContext])
 
   useEffect(() => {
-    const unsubscribe = window.tsterm.ai.onChatStream((event) => {
-      if (!requestRef.current || event.requestId !== requestRef.current) return
-      streamingRef.current += event.text
-      setStreamingText(streamingRef.current)
-    })
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
     if (!settings.aiEnabled || !profile?.model || !isLocal) return
     void ensureLocalModel(profile, { autoPull: settings.aiAutoPullLocalModels })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,91 +356,22 @@ export function AiChatPanel(): React.JSX.Element {
   }
 
   const cancel = (): void => {
-    if (requestRef.current) void window.tsterm.ai.cancel(requestRef.current)
+    if (paneKey) cancelAiMessage(paneKey)
   }
 
-  const send = async (promptOverride?: string): Promise<void> => {
-    const prompt = (promptOverride ?? draft).trim()
-    if (!prompt || busy) return
-    if (!settings.aiEnabled) return
-    if (!profile) {
-      setError('Choose an AI provider in Settings → AI assistant.')
-      return
-    }
-    if (!profile.model) {
-      setError('Choose a model for this provider in Settings → AI assistant.')
-      return
-    }
-
-    const nextMessages: AiChatMessage[] = [...messages, { role: 'user', content: prompt }]
-    const requestId = crypto.randomUUID()
-    requestRef.current = requestId
-    streamingRef.current = ''
-    setStreamingText('')
-    setMessages(nextMessages)
-    setDraft('')
-    setError(null)
-    setBusy(true)
-    try {
-      let referenceHints: string[] = []
-      if (referenceCount > 0) {
-        try {
-          const references = await window.tsterm.references.search({
-            query: prompt,
-            deviceTypeId: activeTypeId,
-            limit: 6
-          })
-          if (references.ok) {
-            referenceHints = references.matches.map(
-              (match) => `### Reference: ${match.docName}\n${match.excerpt}`
-            )
-          }
-        } catch {
-          // Reference lookup is best-effort; never block the chat.
-        }
-      }
-      const result = await window.tsterm.ai.chat({
-        requestId,
-        profileId: profile.id,
-        messages: nextMessages.slice(-12),
-        includeContext: settings.aiIncludeContext,
-        context: {
-          ...collectAiContext({
-            includeContext: settings.aiIncludeContext,
-            prompt
-          }),
-          referenceHints
-        }
-      })
-      if (result.ok) {
-        setMessages([...nextMessages, { role: 'assistant', content: result.text }])
-      } else if (result.cancelled) {
-        const partial = streamingRef.current.trim()
-        if (partial) {
-          setMessages([...nextMessages, { role: 'assistant', content: partial }])
-        }
-        notify({ kind: 'info', title: 'AI request stopped' })
-      } else {
-        const partial = streamingRef.current.trim()
-        if (partial) {
-          setMessages([...nextMessages, { role: 'assistant', content: partial }])
-        }
-        setError(result.error)
-      }
-    } catch (requestError) {
-      const partial = streamingRef.current.trim()
-      if (partial) {
-        setMessages([...nextMessages, { role: 'assistant', content: partial }])
-      }
-      setError((requestError as Error).message)
-    } finally {
-      requestRef.current = null
-      streamingRef.current = ''
-      setStreamingText('')
-      setBusy(false)
-      requestAnimationFrame(() => inputRef.current?.focus())
-    }
+  const send = (promptOverride?: string): void => {
+    if (!paneKey) return
+    void sendAiMessage(paneKey, promptOverride)
   }
+
+  const setDraft = (value: string): void => {
+    if (paneKey) setAiThread(paneKey, { draft: value })
+  }
+
+  const clearChat = (): void => {
+    if (paneKey) clearAiThread(paneKey)
+  }
+
 
   if (!settings.aiEnabled) {
     return (

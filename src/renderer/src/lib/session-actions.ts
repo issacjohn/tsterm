@@ -19,6 +19,7 @@ import {
   type TabState
 } from '../store'
 import { terminalDataBus } from './terminal-bus'
+import { cancelAiMessage } from './ai-chat'
 
 const promptedDeviceTypes = new Set<string>()
 const credentialCache = new Map<string, { password?: string; passphrase?: string }>()
@@ -355,6 +356,8 @@ export function closeTab(tabId: string): void {
   const tab = state.tabs.find((item) => item.id === tabId)
   if (!tab) return
   for (const pane of tab.panes) {
+    cancelAiMessage(pane.id)
+    state.deleteAiThread(pane.id)
     if (pane.sessionId) {
       terminalDataBus.release(pane.sessionId)
       void window.tsterm.terminals.close(pane.sessionId)

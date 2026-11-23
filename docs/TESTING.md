@@ -24,6 +24,7 @@ This covers:
   start, and clear manual instructions.
 - Reference library import, text/PDF extraction, device-type scoping, duplicate detection, retrieval, and
   removal.
+- Per-terminal AI thread isolation, draft restoration, streaming text, and thread deletion.
 - The Electron main/preload/renderer type boundaries.
 
 ## Unit tests
@@ -112,6 +113,20 @@ to **Cisco ASA**, and sends a question through a mock provider. It verifies:
 
 Screenshot `30-ai-reference-scope.png` is written.
 
+## Per-terminal AI thread test
+
+`npm run test:ai-threads` opens two local terminals, scopes the first to Cisco ASA and the second to
+Windows, and verifies:
+
+1. The first terminal's ASA question continues streaming when the second terminal is opened.
+2. The Windows terminal starts with an empty conversation and Windows-only runbook scope.
+3. Returning to the ASA tab restores its messages and unsent draft.
+4. Background replies land in the correct terminal thread.
+5. ASA context does not leak into the Windows request.
+6. The top bar shows the app version and a Check for updates button.
+
+Screenshot `31-ai-per-terminal-threads.png` is written.
+
 ## Missing-runtime UI test
 
 `npm run test:ai-runtime` starts the app against a closed loopback port and enables the assistant. It
@@ -184,7 +199,8 @@ The ASA pack was corrected after testing: it uses `terminal monitor` / `terminal
 (`capture TSTCAP buffer 33554432`), ACL captures use `capture ... access-list TSTCAP_ACL`, ACL cleanup uses
 `clear configure access-list TSTCAP_ACL`, and debug cleanup uses the tested `undebug` form.
 
-The ASA pack currently contains 77 runbooks across 14 categories; the full catalog contains 236 runbooks.
+The ASA pack currently contains 77 runbooks across 14 categories. This build bundles ASA only; the other
+packs are in `catalog-archive/` and are restored one at a time after validation.
 
 
 ## Test credentials

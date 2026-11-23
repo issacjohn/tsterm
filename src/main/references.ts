@@ -13,7 +13,7 @@ const MAX_TEXT_CHARS = 12_000_000
 const MAX_PDF_PAGES = 2000
 const CHUNK_SIZE = 1500
 const CHUNK_OVERLAP = 180
-const MAX_SEARCH_CHARS = 9000
+const MAX_SEARCH_CHARS = 6000
 const SUPPORTED = new Set(['.txt', '.md', '.markdown', '.log', '.json', '.csv', '.html', '.htm', '.pdf'])
 
 interface StoredDoc extends AiReferenceDoc {
@@ -326,7 +326,7 @@ export class ReferenceService {
           matches.push({
             docId: doc.id,
             docName: doc.name,
-            excerpt: chunk.slice(0, 1800),
+            excerpt: chunk.slice(0, 1200),
             score
           })
         }

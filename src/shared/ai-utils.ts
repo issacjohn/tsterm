@@ -172,12 +172,33 @@ export interface AiCommandRisk {
   startsDebugOrCapture: boolean
   hasCleanup: boolean
   stateChanging: boolean
+  captureWarnings: string[]
+}
+
+function captureSyntaxWarnings(commands: string[]): string[] {
+  const warnings = new Set<string>()
+  for (const command of commands) {
+    if (!/^capture\b/i.test(command)) continue
+    if (/\bduration\b/i.test(command)) {
+      warnings.add('ASA capture has no duration keyword. Use a buffer and no capture <name>.')
+    }
+    if (/\b(source|destination|src|dst)\b/i.test(command)) {
+      warnings.add(
+        'ASA capture uses match ip host <src> host <dst> or match ip <src> <mask> <dst> <mask>; source/destination keywords are invalid.'
+      )
+    }
+    if (/\bport\b/i.test(command)) {
+      warnings.add('ASA capture uses eq <port> or range <start> <end>, not the word port.')
+    }
+  }
+  return [...warnings]
 }
 
 export function analyzeAiCommands(commands: string[]): AiCommandRisk {
   return {
     startsDebugOrCapture: commands.some((command) => DEBUG_OR_CAPTURE.test(command)),
     hasCleanup: commands.some((command) => CLEANUP_COMMAND.test(command)),
-    stateChanging: commands.some((command) => STATE_CHANGING.test(command))
+    stateChanging: commands.some((command) => STATE_CHANGING.test(command)),
+    captureWarnings: captureSyntaxWarnings(commands)
   }
 }

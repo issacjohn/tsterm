@@ -1,18 +1,12 @@
-import type { AiChatContext, DeviceType, Snippet, Workflow } from '@shared/types'
+import type { AiChatContext, Snippet } from '@shared/types'
 import {
   promptInputText,
   sanitizeTerminalText,
   stripPromptPrefix,
   toFillableCommand
 } from '@shared/ai-utils'
-import {
-  buildRunbook,
-  initialValues,
-  runbookCleanupCommands,
-  runbookCommands,
-  searchWorkflows
-} from '@shared/catalog-utils'
-import { activePane, useAppStore } from '../store'
+import { buildRunbookHints } from '@shared/ai-knowledge'
+import { activePane, useAppStore, type PaneState } from '../store'
 import { isPasswordPrompt } from './suggestions'
 import { terminalRegistry } from './terminal-registry'
 
@@ -27,10 +21,10 @@ export {
   toFillableCommand
 } from '@shared/ai-utils'
 export type { AiBlock, AiSegment } from '@shared/ai-utils'
+export { buildRunbookHints } from '@shared/ai-knowledge'
 
 const MAX_TAIL_LINES = 80
 const MAX_TAIL_CHARS = 6000
-const MAX_HINTS = 6
 
 export interface TerminalSnapshot {
   tail?: string
@@ -60,53 +54,15 @@ export function readTerminalSnapshot(sessionId: string | undefined): TerminalSna
   }
 }
 
-function describeWorkflow(workflow: Workflow): string {
-  const runbook = buildRunbook(workflow, initialValues(workflow))
-  const commands = runbookCommands(runbook).slice(0, 6)
-  const cleanup =
-    workflow.effect === 'debug' || workflow.effect === 'capture'
-      ? runbookCleanupCommands(runbook).slice(0, 4)
-      : []
-  return [
-    `### ${workflow.title} (${workflow.severity}, ${workflow.effect})`,
-    workflow.summary,
-    commands.length ? `Commands:\n${commands.join('\n')}` : '',
-    cleanup.length ? `Cleanup:\n${cleanup.join('\n')}` : ''
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
-export function buildRunbookHints(type: DeviceType | undefined, query: string): string[] {
-  if (!type) return []
-  try {
-    const hits = searchWorkflows(type, query)
-    const hints = hits
-      .slice(0, MAX_HINTS)
-      .map(({ workflow }) => describeWorkflow(workflow).slice(0, 1600))
-    if (hits.length < 3) {
-      const categories = type.categories.map((category) => category.name).join(' · ')
-      hints.push(
-        `### TSTerm catalog categories for ${type.name}\n${categories}\nOnly use runbooks from ${type.name}; ask a clarifying question if the symptom does not fit one of these categories.`.slice(
-          0,
-          1200
-        )
-      )
-    }
-    return hints
-  } catch {
-    return []
-  }
-}
-
 export interface AiContextOptions {
   includeContext: boolean
   prompt: string
+  pane?: PaneState
 }
 
 export function collectAiContext(options: AiContextOptions): AiChatContext {
   const state = useAppStore.getState()
-  const pane = activePane(state)
+  const pane = options.pane ?? activePane(state)
   const typeId = pane?.deviceTypeId || pane?.session?.deviceType
   const type = state.catalog.types.find((item) => item.id === typeId)
   const host = state.hosts.find((item) => item.id === pane?.hostId)

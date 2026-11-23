@@ -106,6 +106,24 @@ export interface Toast {
   message?: string
 }
 
+export interface AiThreadState {
+  messages: AiChatMessage[]
+  draft: string
+  busy: boolean
+  requestId?: string
+  streamingText: string
+  error?: string
+  updatedAt: number
+}
+
+export const EMPTY_AI_THREAD: AiThreadState = {
+  messages: [],
+  draft: '',
+  busy: false,
+  streamingText: '',
+  updatedAt: 0
+}
+
 export interface AppStore {
   ready: boolean
   bootstrap: Bootstrap | null
@@ -117,8 +135,7 @@ export interface AppStore {
   debugSessions: DebugSession[]
   aiKeyIds: string[]
   referenceDocs: AiReferenceDoc[]
-  aiMessages: AiChatMessage[]
-  aiDraft: string
+  aiThreads: Record<string, AiThreadState>
   troubleshootTab: TroubleshootTab
   tabs: TabState[]
   activeTabId: string | null
@@ -138,9 +155,11 @@ export interface AppStore {
   setDebugSessions: (sessions: DebugSession[]) => void
   setAiKeyIds: (keyIds: string[]) => void
   setReferenceDocs: (docs: AiReferenceDoc[]) => void
-  setAiMessages: (messages: AiChatMessage[]) => void
-  setAiDraft: (draft: string) => void
-  clearAiChat: () => void
+  setAiThread: (
+    key: string,
+    patch: Partial<AiThreadState> | ((thread: AiThreadState) => Partial<AiThreadState>)
+  ) => void
+  deleteAiThread: (key: string) => void
   setTroubleshootTab: (tab: TroubleshootTab) => void
   setModal: (modal: ModalState) => void
   setSidebarView: (view: SidebarView) => void
@@ -183,8 +202,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   debugSessions: [],
   aiKeyIds: [],
   referenceDocs: [],
-  aiMessages: [],
-  aiDraft: '',
+  aiThreads: {},
   troubleshootTab: 'runbooks',
   tabs: [],
   activeTabId: null,
@@ -224,9 +242,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setDebugSessions: (debugSessions) => set({ debugSessions }),
   setAiKeyIds: (aiKeyIds) => set({ aiKeyIds }),
   setReferenceDocs: (referenceDocs) => set({ referenceDocs }),
-  setAiMessages: (aiMessages) => set({ aiMessages }),
-  setAiDraft: (aiDraft) => set({ aiDraft }),
-  clearAiChat: () => set({ aiMessages: [], aiDraft: '' }),
+  setAiThread: (key, patch) =>
+    set((state) => {
+      if (!key) return state
+      const current = state.aiThreads[key] ?? { ...EMPTY_AI_THREAD }
+      const value = typeof patch === 'function' ? patch(current) : patch
+      return {
+        aiThreads: {
+          ...state.aiThreads,
+          [key]: { ...current, ...value, updatedAt: Date.now() }
+        }
+      }
+    }),
+  deleteAiThread: (key) =>
+    set((state) => {
+      if (!state.aiThreads[key]) return state
+      const next = { ...state.aiThreads }
+      delete next[key]
+      return { aiThreads: next }
+    }),
   setTroubleshootTab: (troubleshootTab) => set({ troubleshootTab }),
   setModal: (modal) => set({ modal }),
   setSidebarView: (sidebarView) => set({ sidebarView }),
