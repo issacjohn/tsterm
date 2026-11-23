@@ -10,6 +10,12 @@ export function looksLikeCommand(value: string): boolean {
   return COMMAND_START.test(command)
 }
 
+export function extractInlineCommands(text: string): string[] {
+  return Array.from(text.matchAll(/`([^`\n]+)`/g))
+    .map((match) => match[1].trim())
+    .filter((command) => looksLikeCommand(command))
+}
+
 export function isSmallModelName(value: string): boolean {
   const model = value.trim().toLowerCase().replace(/:latest$/, '')
   if (!model) return false

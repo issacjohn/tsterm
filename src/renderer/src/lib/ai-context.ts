@@ -19,6 +19,7 @@ import { terminalRegistry } from './terminal-registry'
 export {
   analyzeAiCommands,
   extractCommands,
+  extractInlineCommands,
   looksLikeCommand,
   parseAiContent,
   sanitizeTerminalText,

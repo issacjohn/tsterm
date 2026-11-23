@@ -32,6 +32,7 @@ import {
 import {
   analyzeAiCommands,
   collectAiContext,
+  extractInlineCommands,
   fillTerminalPrompt,
   looksLikeCommand,
   parseAiContent,
@@ -206,7 +207,9 @@ function AssistantMessage({
 }): React.JSX.Element {
   const segments = parseAiContent(message.content)
   const commands = segments.flatMap((segment) =>
-    segment.kind === 'code' ? segment.block.commands : []
+    segment.kind === 'code'
+      ? segment.block.commands
+      : extractInlineCommands(segment.content)
   )
   const { startsDebugOrCapture, hasCleanup } = analyzeAiCommands(commands)
 

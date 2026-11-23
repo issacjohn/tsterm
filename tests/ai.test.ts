@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS } from '../src/shared/themes'
 import {
   analyzeAiCommands,
   extractCommands,
+  extractInlineCommands,
   isLoopbackUrl,
   isSmallModelName,
   looksLikeCommand,
@@ -496,6 +497,8 @@ describe('AI system prompt', () => {
     expect(prompt).toContain('Cisco ASA')
     expect(prompt).toContain('capture cap interface outside')
     expect(prompt).toContain('cleanup')
+    expect(prompt).toContain('capture has no duration keyword')
+    expect(prompt).toContain('no capture <name>')
   })
 
   it('omits terminal context when the user turns it off', () => {
@@ -606,6 +609,19 @@ describe('AI command parsing', () => {
     expect(looksLikeCommand('https://example.com')).toBe(false)
     expect(looksLikeCommand('just a normal sentence')).toBe(false)
     expect(looksLikeCommand('show\nversion')).toBe(false)
+  })
+
+  it('extracts inline commands so cleanup checks still run', () => {
+    const commands = extractInlineCommands(
+      'Run `capture TSTCAP interface outside match ip any any` and `show capture TSTCAP`.'
+    )
+    expect(commands).toEqual([
+      'capture TSTCAP interface outside match ip any any',
+      'show capture TSTCAP'
+    ])
+    const risk = analyzeAiCommands(commands)
+    expect(risk.startsDebugOrCapture).toBe(true)
+    expect(risk.hasCleanup).toBe(false)
   })
 
   it('detects text already typed after the prompt', () => {
