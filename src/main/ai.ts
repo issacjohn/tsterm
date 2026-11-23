@@ -2,10 +2,16 @@ import type {
   AiChatContext,
   AiChatRequest,
   AiChatResult,
+  AiLocalStatusRequest,
+  AiLocalStatusResult,
   AiModelsRequest,
   AiModelsResult,
-  AiProfile
+  AiProfile,
+  AiPullModelRequest,
+  AiPullModelResult,
+  AiPullProgressEvent
 } from '@shared/types'
+import { isLoopbackUrl } from '@shared/ai-utils'
 import type { Store } from './store'
 
 const MAX_CONTEXT_CHARS = 7000
@@ -35,6 +41,35 @@ function normalizeBase(profile: AiProfile): string {
 function redact(value: string, secret: string | undefined): string {
   if (!secret) return value
   return value.split(secret).join('[redacted]')
+}
+
+function normalizeOllamaModel(name: string): string {
+  return name.trim().replace(/:latest$/i, '').toLowerCase()
+}
+
+function ollamaBase(profile: AiProfile): string {
+  const raw = (profile.baseUrl ?? '').trim()
+  if (!isLoopbackUrl(raw)) {
+    throw new Error(
+      'Automatic model downloads are only available for Ollama running on this computer.'
+    )
+  }
+  const parsed = new URL(raw)
+  const pathname = parsed.pathname
+    .replace(/\/+$/, '')
+    .replace(/\/chat\/completions$/i, '')
+    .replace(/\/messages$/i, '')
+    .replace(/\/models$/i, '')
+    .replace(/\/v1$/i, '')
+  return `${parsed.protocol}//${parsed.host}${pathname}`
+}
+
+function validateModelName(value: string): string {
+  const model = value.trim()
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(model)) {
+    throw new Error('Choose a valid Ollama model name, for example llama3.2 or qwen2.5:7b.')
+  }
+  return model
 }
 
 function openAiBase(profile: AiProfile): string {
@@ -156,6 +191,217 @@ export class AiService {
     } finally {
       clearTimeout(timer)
       this.controllers.delete(requestId)
+    }
+  }
+
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number
+  ): Promise<Response> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      return await fetch(url, { ...init, signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async localStatus(request: AiLocalStatusRequest): Promise<AiLocalStatusResult> {
+    let baseUrl = ''
+    try {
+      if (!request?.profile) throw new Error('No AI provider was selected.')
+      baseUrl = ollamaBase(request.profile)
+    } catch (error) {
+      return {
+        ok: false,
+        runtime: 'unknown',
+        baseUrl,
+        needsRuntime: false,
+        error: (error as Error).message
+      }
+    }
+
+    try {
+      const versionResponse = await this.fetchWithTimeout(
+        `${baseUrl}/api/version`,
+        { headers: { Accept: 'application/json' } },
+        6000
+      )
+      if (versionResponse.status === 404) {
+        return {
+          ok: false,
+          runtime: 'unknown',
+          baseUrl,
+          needsRuntime: false,
+          error:
+            'This local endpoint is not Ollama. LM Studio and other servers manage their own models.'
+        }
+      }
+      if (!versionResponse.ok) {
+        throw new Error(`Ollama returned HTTP ${versionResponse.status}.`)
+      }
+      const versionData = (await versionResponse.json().catch(() => ({}))) as { version?: string }
+
+      const tagsResponse = await this.fetchWithTimeout(
+        `${baseUrl}/api/tags`,
+        { headers: { Accept: 'application/json' } },
+        6000
+      )
+      if (tagsResponse.status === 404) {
+        return {
+          ok: false,
+          runtime: 'unknown',
+          baseUrl,
+          needsRuntime: false,
+          error:
+            'This local endpoint is not Ollama. LM Studio and other servers manage their own models.'
+        }
+      }
+      if (!tagsResponse.ok) throw new Error(`Ollama returned HTTP ${tagsResponse.status}.`)
+      const tags = (await tagsResponse.json()) as {
+        models?: Array<{ name?: string; model?: string } | string>
+      }
+      const models = (Array.isArray(tags.models) ? tags.models : [])
+        .map((item) =>
+          typeof item === 'string' ? item : item.name || item.model || ''
+        )
+        .map((name) => name.trim())
+        .filter(Boolean)
+      const wanted = typeof request.model === 'string' ? request.model.trim() : ''
+      const resolvedModel = wanted
+        ? models.find((name) => normalizeOllamaModel(name) === normalizeOllamaModel(wanted))
+        : undefined
+      return {
+        ok: true,
+        runtime: 'ollama',
+        baseUrl,
+        version: typeof versionData.version === 'string' ? versionData.version : undefined,
+        models: models.slice(0, 500),
+        modelReady: Boolean(resolvedModel),
+        resolvedModel
+      }
+    } catch {
+      return {
+        ok: false,
+        runtime: 'ollama',
+        baseUrl,
+        needsRuntime: true,
+        error: `Ollama is not responding at ${baseUrl}. Install or start Ollama, then retry.`
+      }
+    }
+  }
+
+  async pullModel(
+    request: AiPullModelRequest,
+    onProgress?: (event: AiPullProgressEvent) => void
+  ): Promise<AiPullModelResult> {
+    let controller: AbortController | undefined
+    try {
+      if (!request?.requestId || !/^[a-z0-9-]{8,64}$/i.test(request.requestId)) {
+        throw new Error('Missing or invalid request id.')
+      }
+      if (!request.profile) throw new Error('No AI provider was selected.')
+      const baseUrl = ollamaBase(request.profile)
+      const model = validateModelName(request.model ?? '')
+
+      controller = new AbortController()
+      this.controllers.set(request.requestId, controller)
+      const response = await fetch(`${baseUrl}/api/pull`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/x-ndjson'
+        },
+        body: JSON.stringify({ name: model, stream: true }),
+        signal: controller.signal
+      })
+      if (!response.ok) {
+        const raw = await response.text().catch(() => '')
+        throw new Error(
+          `Ollama could not download ${model}: HTTP ${response.status}${raw ? ` ${raw.slice(0, 300)}` : ''}`
+        )
+      }
+      if (!response.body) throw new Error('Ollama returned an empty download stream.')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let success = false
+      let lastEmitAt = 0
+      let lastStatus = ''
+
+      const emit = (event: AiPullProgressEvent, force = false): void => {
+        if (!onProgress) return
+        const now = Date.now()
+        if (!force && event.status === lastStatus && now - lastEmitAt < 250) return
+        lastEmitAt = now
+        lastStatus = event.status
+        onProgress(event)
+      }
+
+      const handleLine = (line: string): void => {
+        const trimmed = line.trim()
+        if (!trimmed) return
+        let payload: {
+          status?: string
+          error?: string
+          completed?: number
+          total?: number
+        }
+        try {
+          payload = JSON.parse(trimmed)
+        } catch {
+          return
+        }
+        if (payload.error) throw new Error(payload.error)
+        const status = payload.status || 'downloading'
+        const completed =
+          typeof payload.completed === 'number' ? payload.completed : undefined
+        const total = typeof payload.total === 'number' ? payload.total : undefined
+        const percent =
+          completed !== undefined && total
+            ? Math.min(100, Math.max(0, Math.round((completed / total) * 100)))
+            : undefined
+        if (status === 'success') success = true
+        emit(
+          {
+            requestId: request.requestId,
+            status,
+            completed,
+            total,
+            percent
+          },
+          status === 'success'
+        )
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) handleLine(line)
+      }
+      if (buffer.trim()) handleLine(buffer)
+      if (!success) {
+        throw new Error('The download ended before Ollama reported success. Try again.')
+      }
+      emit({ requestId: request.requestId, status: 'success', percent: 100 }, true)
+      return { ok: true, model }
+    } catch (error) {
+      const cancelled = (error as Error).name === 'AbortError'
+      return {
+        ok: false,
+        cancelled,
+        error: cancelled
+          ? 'Model download cancelled.'
+          : `Could not download the local model. ${(error as Error).message}`.trim()
+      }
+    } finally {
+      if (controller && request?.requestId) this.controllers.delete(request.requestId)
     }
   }
 

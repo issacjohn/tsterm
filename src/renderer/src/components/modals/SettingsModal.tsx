@@ -29,8 +29,17 @@ import {
 } from 'lucide-react'
 import type { AiProfile, AppSettings, AppThemeId, TerminalTheme } from '@shared/types'
 import { getTerminalTheme, TERMINAL_THEMES } from '@shared/themes'
+import { isLoopbackUrl } from '@shared/ai-utils'
 import { useAppStore, type SettingsTab } from '../../store'
 import { saveSettings } from '../../lib/session-actions'
+import {
+  cancelLocalModelPull,
+  ensureLocalModel,
+  formatModelBytes,
+  localPullStatusLabel,
+  useLocalModelState,
+  type LocalModelState
+} from '../../lib/ai-local'
 import { ghostColor } from '../../lib/theme'
 import { cx } from '../../lib/format'
 import { Modal } from '../ui/Modal'
@@ -228,6 +237,122 @@ function ThemeTile({ theme, active, onClick }: { theme: TerminalTheme; active: b
   )
 }
 
+function LocalModelPanel({
+  profile,
+  state,
+  onCheck,
+  onOpenOllama
+}: {
+  profile: AiProfile
+  state: LocalModelState
+  onCheck: (force: boolean) => void
+  onOpenOllama: () => void
+}): React.JSX.Element {
+  const percent = state.percent
+  const progress = state.progress
+  const canDownload = state.status?.ok === true && state.status.modelReady === false
+  const needsOllama =
+    state.phase !== 'unsupported' &&
+    state.status?.ok === false &&
+    state.status.needsRuntime === true
+
+  return (
+    <div className={cx('ai-local-panel', state.phase)}>
+      <div className="ai-local-panel-head">
+        <span>
+          <Download size={13} /> Local model
+        </span>
+        <em>{profile.model}</em>
+      </div>
+
+      {state.phase === 'checking' ? (
+        <div className="ai-local-line">
+          <Loader2 size={13} className="spin" />
+          <span>Checking Ollama and installed models…</span>
+        </div>
+      ) : null}
+
+      {state.phase === 'pulling' ? (
+        <div className="ai-local-progress">
+          <div className="ai-local-progress-label">
+            <span>{localPullStatusLabel(progress?.status)}</span>
+            <em>{percent !== undefined ? `${percent}%` : 'working…'}</em>
+          </div>
+          <div className="ai-local-bar">
+            <i
+              className={percent === undefined ? 'indeterminate' : undefined}
+              style={percent !== undefined ? { width: `${percent}%` } : undefined}
+            />
+          </div>
+          <div className="ai-local-progress-foot">
+            <span>
+              {progress?.completed !== undefined && progress?.total
+                ? `${formatModelBytes(progress.completed)} of ${formatModelBytes(progress.total)}`
+                : 'Ollama preserves completed layers if this is interrupted.'}
+            </span>
+            <button className="btn btn-ghost btn-xs" onClick={cancelLocalModelPull}>
+              <X size={11} /> Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {state.phase === 'ready' ? (
+        <div className="ai-local-line ok">
+          <Check size={13} />
+          <span>
+            Installed and ready
+            {state.status?.ok && state.status.version
+              ? ` on Ollama ${state.status.version}`
+              : ''}.
+          </span>
+        </div>
+      ) : null}
+
+      {state.phase === 'unsupported' ? (
+        <div className="ai-local-line">
+          <ShieldCheck size={13} />
+          <span>
+            {state.error ||
+              'This local endpoint is not Ollama. LM Studio and other servers manage their own models.'}
+          </span>
+        </div>
+      ) : null}
+
+      {state.phase === 'missing' || state.phase === 'error' ? (
+        <div className="ai-local-message">
+          <span>{state.error || `${profile.model} is not installed yet.`}</span>
+          <div className="ai-local-actions">
+            {canDownload ? (
+              <button className="btn btn-primary btn-sm" onClick={() => onCheck(true)}>
+                <Download size={13} /> Download model
+              </button>
+            ) : (
+              <button className="btn btn-sm" onClick={() => onCheck(true)}>
+                <RefreshCw size={13} /> Retry
+              </button>
+            )}
+            {needsOllama ? (
+              <button className="btn btn-ghost btn-sm" onClick={onOpenOllama}>
+                <ExternalLink size={13} /> Get Ollama
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {state.phase === 'idle' ? (
+        <div className="ai-local-line">
+          <span>Check whether {profile.model} is installed.</span>
+          <button className="btn btn-ghost btn-xs" onClick={() => onCheck(false)}>
+            Check
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 interface SettingsModalProps {
   tab?: SettingsTab
   onClose: () => void
@@ -257,12 +382,22 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
   const [modelBusy, setModelBusy] = useState(false)
   const [modelError, setModelError] = useState<string | null>(null)
   const theme = getTerminalTheme(settings)
+  const localModel = useLocalModelState()
 
   const update = (patch: Partial<AppSettings>): void => saveSettings(patch)
 
   const activeProfile =
     settings.aiProfiles.find((profile) => profile.id === settings.aiActiveProfileId) ??
     settings.aiProfiles[0]
+  const localProfile =
+    activeProfile && isLoopbackUrl(activeProfile.baseUrl) ? activeProfile : undefined
+  const localStateForProfile: LocalModelState =
+    localProfile &&
+    localModel.profileId === localProfile.id &&
+    localModel.model === localProfile.model &&
+    localModel.baseUrl === localProfile.baseUrl
+      ? localModel
+      : { phase: 'idle' }
 
   useEffect(() => {
     setProfileDraft(activeProfile ? { ...activeProfile } : null)
@@ -273,6 +408,20 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
     // Only reset the editor when the selected provider changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfile?.id])
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !settings.aiEnabled) return
+    if (!localProfile?.model) return
+    void ensureLocalModel(localProfile, { autoPull: settings.aiAutoPullLocalModels })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeTab,
+    settings.aiEnabled,
+    settings.aiAutoPullLocalModels,
+    localProfile?.id,
+    localProfile?.baseUrl,
+    localProfile?.model
+  ])
 
   const patchProfile = (patch: Partial<AiProfile>): void => {
     setProfileDraft((current) => (current ? { ...current, ...patch } : current))
@@ -863,6 +1012,12 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                     label="Include device and terminal context"
                     description="Adds the device pack, matching runbooks, the current command line, and the last 80 terminal lines. Passwords and common secret fields are redacted."
                   />
+                  <SettingToggle
+                    checked={settings.aiAutoPullLocalModels}
+                    onChange={(value) => update({ aiAutoPullLocalModels: value })}
+                    label="Download local models automatically"
+                    description="When Ollama is running and the selected model is missing, TSTerm starts the download and shows progress. You can cancel at any time."
+                  />
 
                   <div className="settings-note-card ai-guardrail-card">
                     <ShieldCheck size={15} />
@@ -1010,6 +1165,19 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                         ) : null}
                       </div>
                       {modelError ? <div className="ai-inline-error">{modelError}</div> : null}
+
+                      {localProfile && settings.aiEnabled ? (
+                        <LocalModelPanel
+                          profile={localProfile}
+                          state={localStateForProfile}
+                          onCheck={(force) =>
+                            void ensureLocalModel(localProfile, { autoPull: true, force })
+                          }
+                          onOpenOllama={() =>
+                            void window.tsterm.app.openExternal('https://ollama.com/download')
+                          }
+                        />
+                      ) : null}
 
                       <Slider
                         label="Temperature"

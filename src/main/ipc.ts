@@ -334,6 +334,12 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle('ai:chat', (_event, request) => ai.chat(request))
   ipcMain.handle('ai:list-models', (_event, request) => ai.listModels(request))
+  ipcMain.handle('ai:local-status', (_event, request) => ai.localStatus(request))
+  ipcMain.handle('ai:pull-model', (event, request) =>
+    ai.pullModel(request, (progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send('ai:pull-progress', progress)
+    })
+  )
   ipcMain.handle('ai:save-key', (_event, profileId: string, key: string) => {
     store.saveAiKey(requiredString(profileId, 'AI profile id'), requiredString(key, 'API key'))
     return store.getAiKeyIds()

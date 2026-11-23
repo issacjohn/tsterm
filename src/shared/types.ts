@@ -356,6 +356,7 @@ export interface AppSettings {
   aiActiveProfileId?: string
   aiProfiles: AiProfile[]
   aiIncludeContext: boolean
+  aiAutoPullLocalModels: boolean
 }
 
 export type AiProviderKind = 'openai-compatible' | 'anthropic'
@@ -409,6 +410,47 @@ export interface AiModelsRequest {
 export type AiModelsResult =
   | { ok: true; models: string[] }
   | { ok: false; error: string }
+
+export interface AiLocalStatusRequest {
+  profile: AiProfile
+  model: string
+}
+
+export type AiLocalStatusResult =
+  | {
+      ok: true
+      runtime: 'ollama'
+      baseUrl: string
+      version?: string
+      models: string[]
+      modelReady: boolean
+      resolvedModel?: string
+    }
+  | {
+      ok: false
+      runtime: 'ollama' | 'unknown'
+      baseUrl: string
+      needsRuntime: boolean
+      error: string
+    }
+
+export interface AiPullModelRequest {
+  requestId: string
+  profile: AiProfile
+  model: string
+}
+
+export type AiPullModelResult =
+  | { ok: true; model: string; alreadyInstalled?: boolean }
+  | { ok: false; error: string; cancelled?: boolean }
+
+export interface AiPullProgressEvent {
+  requestId: string
+  status: string
+  completed?: number
+  total?: number
+  percent?: number
+}
 
 export interface UpdateInfo {
   currentVersion: string
@@ -661,6 +703,9 @@ export interface TstermApi {
   ai: {
     chat(request: AiChatRequest): Promise<AiChatResult>
     listModels(request: AiModelsRequest): Promise<AiModelsResult>
+    localStatus(request: AiLocalStatusRequest): Promise<AiLocalStatusResult>
+    pullModel(request: AiPullModelRequest): Promise<AiPullModelResult>
+    onPullProgress(callback: (event: AiPullProgressEvent) => void): Unsubscribe
     saveKey(profileId: string, key: string): Promise<string[]>
     deleteKey(profileId: string): Promise<string[]>
     keyIds(): Promise<string[]>

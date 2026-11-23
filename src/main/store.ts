@@ -178,7 +178,8 @@ function sanitizeSettings(input: unknown): AppSettings {
     'reduceMotion',
     'autoCheckUpdates',
     'aiEnabled',
-    'aiIncludeContext'
+    'aiIncludeContext',
+    'aiAutoPullLocalModels'
   ]
   const mergedRecord = merged as unknown as Record<string, unknown>
   const defaultsRecord = DEFAULT_SETTINGS as unknown as Record<string, unknown>

@@ -74,6 +74,13 @@ TSTerm can hold a troubleshooting conversation with a **local model (Ollama or L
 you already subscribe to. It is **off by default** and is configured separately in
 **Settings → AI assistant**.
 
+Ollama users do not need to run `ollama pull`. When the assistant is enabled, TSTerm checks the local
+Ollama server and automatically downloads the selected model through Ollama's pull API, with live progress
+and a cancel button. The download continues if you close Settings, and can be turned off with
+**Download local models automatically**. Ollama itself must be installed once.
+
+![Automatic local model download](screenshots/24-ai-model-download.png)
+
 The boundary is deliberate and enforced in the app architecture:
 
 - The AI process has **no terminal, SSH, file, or IPC execution access**.
@@ -283,6 +290,9 @@ Several opt-in tests are included:
 ```bash
 # Runs the AI opt-in, provider, key, chat, and fill-without-Enter flow against a local mock model
 npm run test:ai
+
+# Simulates Ollama, verifies the automatic model pull, progress, background completion, and chat
+npm run test:ai-local
 
 # Starts a real RADIUS debug, quits through the guard, and checks the cleanup with show debug
 npm run test:debug-guard

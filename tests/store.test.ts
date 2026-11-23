@@ -42,6 +42,7 @@ describe('settings migration', () => {
     expect(settings.aiProfiles.length).toBeGreaterThan(0)
     expect(settings.aiActiveProfileId).toBe(settings.aiProfiles[0].id)
     expect(settings.aiIncludeContext).toBe(true)
+    expect(settings.aiAutoPullLocalModels).toBe(true)
   })
 
   it('sanitizes invalid provider URLs and keeps a usable default', () => {

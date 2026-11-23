@@ -1,3 +1,13 @@
+export function isLoopbackUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+    return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
 const PROMPT_PREFIX = /^\s*(?:[A-Za-z0-9_.@:/~-]{1,96}[#>$%](?:\s+|$))+/
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g
 /**

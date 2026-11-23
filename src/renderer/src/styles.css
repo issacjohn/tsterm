@@ -7560,3 +7560,212 @@ input[type="range"] {
   font-style: normal;
   letter-spacing: 0.03em;
 }
+
+/* -------------------------------------------------------- local ai models */
+
+.ai-local-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+}
+
+.ai-local-panel.ready {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--bg-soft));
+}
+
+.ai-local-panel.pulling,
+.ai-local-panel.checking {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: var(--accent-soft);
+}
+
+.ai-local-panel.missing,
+.ai-local-panel.error {
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--border));
+  background: var(--amber-soft);
+}
+
+.ai-local-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-local-panel-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.ai-local-panel-head em {
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-local-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+
+.ai-local-line.ok {
+  color: var(--accent);
+}
+
+.ai-local-line > span {
+  flex: 1;
+}
+
+.ai-local-message {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+
+.ai-local-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ai-local-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-local-progress-label,
+.ai-local-progress-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.ai-local-progress-label span {
+  color: var(--text-soft);
+  font-size: 8.5px;
+}
+
+.ai-local-progress-label em {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.ai-local-bar {
+  width: 100%;
+  height: 6px;
+  min-height: 6px;
+  flex: 0 0 6px;
+  margin: 1px 0;
+  border-radius: 5px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.ai-local-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 240ms ease;
+}
+
+.ai-local-bar i.indeterminate {
+  width: 40%;
+  animation: aiLocalIndeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes aiLocalIndeterminate {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
+
+.ai-local-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 10px 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.ai-local-banner > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ai-local-banner.pulling,
+.ai-local-banner.checking {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ai-local-banner.missing {
+  border-color: color-mix(in srgb, var(--amber) 32%, var(--border));
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.ai-local-banner.error {
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--border));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ai-local-banner-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ai-local-banner-copy strong {
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.ai-local-banner-copy span {
+  color: var(--faint);
+  font-size: 8px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ai-local-banner .btn {
+  height: 21px;
+  padding: 0 6px;
+  flex-shrink: 0;
+  font-size: 8px;
+}

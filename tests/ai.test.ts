@@ -5,13 +5,14 @@ import { DEFAULT_SETTINGS } from '../src/shared/themes'
 import {
   analyzeAiCommands,
   extractCommands,
+  isLoopbackUrl,
   parseAiContent,
   promptInputText,
   sanitizeTerminalText,
   toFillableCommand
 } from '../src/shared/ai-utils'
 import type { Store } from '../src/main/store'
-import type { AiChatRequest } from '../src/shared/types'
+import type { AiChatRequest, AiProfile } from '../src/shared/types'
 
 function fakeStore(
   overrides: { aiEnabled: boolean; aiProfiles?: unknown[]; aiActiveProfileId?: string },
@@ -24,7 +25,7 @@ function fakeStore(
   } as unknown as Store
 }
 
-function testProfile(overrides: Record<string, unknown> = {}) {
+function testProfile(overrides: Partial<AiProfile> = {}): AiProfile {
   return {
     id: 'test-provider',
     name: 'Test provider',
@@ -80,7 +81,16 @@ describe('AI request boundary', () => {
     const methods = Object.getOwnPropertyNames(AiService.prototype).filter(
       (name) => name !== 'constructor'
     )
-    expect(methods.sort()).toEqual(['cancel', 'chat', 'listModels', 'profile', 'request'])
+    expect(methods.sort()).toEqual([
+      'cancel',
+      'chat',
+      'fetchWithTimeout',
+      'listModels',
+      'localStatus',
+      'profile',
+      'pullModel',
+      'request'
+    ])
     expect(methods.some((name) => /execute|write|send|run|terminal|command/i.test(name))).toBe(false)
   })
 
@@ -189,6 +199,197 @@ describe('AI provider requests', () => {
       await new AiService(store).chat({ ...baseRequest, profileId: profile.id })
       const [url] = fetchSpy.mock.calls[0] as unknown as [string]
       expect(url).toBe('https://api.example.com/v1/chat/completions')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('local Ollama model management', () => {
+  const ollamaProfile = testProfile({
+    id: 'local-ollama',
+    name: 'Ollama (local)',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: 'llama3.2',
+    authStyle: 'none',
+    local: true
+  })
+
+  it('recognizes loopback endpoints only', () => {
+    expect(isLoopbackUrl('http://127.0.0.1:11434/v1')).toBe(true)
+    expect(isLoopbackUrl('http://localhost:1234/v1')).toBe(true)
+    expect(isLoopbackUrl('http://[::1]:11434/v1')).toBe(true)
+    expect(isLoopbackUrl('https://api.example.com/v1')).toBe(false)
+    expect(isLoopbackUrl('http://192.168.1.10:11434')).toBe(false)
+    expect(isLoopbackUrl('file:///tmp/ollama')).toBe(false)
+    expect(isLoopbackUrl('not a url')).toBe(false)
+  })
+
+  it('reports Ollama models and matches the :latest tag', async () => {
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [ollamaProfile], aiActiveProfileId: ollamaProfile.id },
+      undefined
+    )
+    const fetchSpy = vi.fn(async (url: string | URL | Request) => {
+      const target = String(url)
+      if (target.endsWith('/api/version')) {
+        return new Response(JSON.stringify({ version: '0.5.7' }), { status: 200 })
+      }
+      if (target.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
+          status: 200
+        })
+      }
+      throw new Error(`Unexpected URL ${target}`)
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const result = await new AiService(store).localStatus({
+        profile: ollamaProfile,
+        model: 'llama3.2'
+      })
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.runtime).toBe('ollama')
+        expect(result.version).toBe('0.5.7')
+        expect(result.modelReady).toBe(true)
+        expect(result.resolvedModel).toBe('llama3.2:latest')
+        expect(result.baseUrl).toBe('http://127.0.0.1:11434')
+      }
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('reports a missing runtime without throwing', async () => {
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [ollamaProfile], aiActiveProfileId: ollamaProfile.id },
+      undefined
+    )
+    const fetchSpy = vi.fn(async () => {
+      throw new TypeError('fetch failed')
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const result = await new AiService(store).localStatus({
+        profile: ollamaProfile,
+        model: 'llama3.2'
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.needsRuntime).toBe(true)
+        expect(result.error).toContain('not responding')
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('refuses automatic downloads for non-loopback providers', async () => {
+    const profile = testProfile({ baseUrl: 'https://api.example.com/v1' })
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [profile], aiActiveProfileId: profile.id },
+      undefined
+    )
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const result = await new AiService(store).pullModel({
+        requestId: 'pull-12345678',
+        profile,
+        model: 'llama3.2'
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error).toContain('only available for Ollama')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('streams Ollama pull progress and completes', async () => {
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [ollamaProfile], aiActiveProfileId: ollamaProfile.id },
+      undefined
+    )
+    const body = [
+      '{"status":"pulling manifest"}',
+      '{"status":"pulling 123456","completed":50,"total":100}',
+      '{"status":"verifying sha256 digest"}',
+      '{"status":"success"}'
+    ].join('\n')
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${body}\n`))
+        controller.close()
+      }
+    })
+    const fetchSpy = vi.fn(async () => new Response(stream, { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const events: Array<{ status: string; percent?: number }> = []
+    try {
+      const result = await new AiService(store).pullModel(
+        {
+          requestId: 'pull-12345678',
+          profile: ollamaProfile,
+          model: 'llama3.2'
+        },
+        (event) => events.push({ status: event.status, percent: event.percent })
+      )
+      expect(result).toEqual({ ok: true, model: 'llama3.2' })
+      const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit]
+      expect(url).toBe('http://127.0.0.1:11434/api/pull')
+      expect(JSON.parse(String(init.body))).toEqual({ name: 'llama3.2', stream: true })
+      expect(events.some((event) => event.percent === 50)).toBe(true)
+      expect(events.at(-1)).toEqual({ status: 'success', percent: 100 })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('surfaces an Ollama pull error line', async () => {
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [ollamaProfile], aiActiveProfileId: ollamaProfile.id },
+      undefined
+    )
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode('{"error":"pull model manifest: file does not exist"}\n')
+        )
+        controller.close()
+      }
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })))
+    try {
+      const result = await new AiService(store).pullModel({
+        requestId: 'pull-12345678',
+        profile: ollamaProfile,
+        model: 'missing-model'
+      })
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error).toContain('file does not exist')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('rejects unsafe model names before contacting Ollama', async () => {
+    const store = fakeStore(
+      { aiEnabled: true, aiProfiles: [ollamaProfile], aiActiveProfileId: ollamaProfile.id },
+      undefined
+    )
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const result = await new AiService(store).pullModel({
+        requestId: 'pull-12345678',
+        profile: ollamaProfile,
+        model: '../../escape'
+      })
+      expect(result.ok).toBe(false)
+      expect(fetchSpy).not.toHaveBeenCalled()
     } finally {
       vi.unstubAllGlobals()
     }

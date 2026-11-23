@@ -5,18 +5,29 @@ import {
   CircleStop,
   Copy,
   CornerDownLeft,
+  Download,
   Eraser,
   Eye,
   EyeOff,
   KeyRound,
+  Loader2,
   Send,
   ShieldCheck,
   Sparkles,
-  TerminalSquare
+  TerminalSquare,
+  X
 } from 'lucide-react'
 import type { AiChatMessage, AiProfile } from '@shared/types'
+import { isLoopbackUrl } from '@shared/ai-utils'
 import { activePane, useAppStore } from '../store'
 import { saveSettings } from '../lib/session-actions'
+import {
+  cancelLocalModelPull,
+  ensureLocalModel,
+  formatModelBytes,
+  localPullStatusLabel,
+  useLocalModelState
+} from '../lib/ai-local'
 import {
   analyzeAiCommands,
   collectAiContext,
@@ -214,6 +225,7 @@ export function AiChatPanel(): React.JSX.Element {
   const clearChat = useAppStore((state) => state.clearAiChat)
   const setModal = useAppStore((state) => state.setModal)
   const notify = useAppStore((state) => state.notify)
+  const localModel = useLocalModelState()
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -227,12 +239,36 @@ export function AiChatPanel(): React.JSX.Element {
     settings.aiProfiles.find((item) => item.id === settings.aiActiveProfileId) ??
     settings.aiProfiles[0]
   const sessionId = pane?.status === 'connected' ? pane.sessionId : undefined
-  const canChat = Boolean(settings.aiEnabled && profile?.model)
+  const isLocal = Boolean(profile?.local && isLoopbackUrl(profile.baseUrl))
+  const localState =
+    isLocal &&
+    localModel.profileId === profile?.id &&
+    localModel.model === profile?.model &&
+    localModel.baseUrl === profile?.baseUrl
+      ? localModel
+      : null
+  const localBlocked = Boolean(
+    localState && ['pulling', 'missing', 'error'].includes(localState.phase)
+  )
+  const canChat = Boolean(settings.aiEnabled && profile?.model && !localBlocked)
   const needsKey = Boolean(profile && profile.authStyle !== 'none' && !keyIds.includes(profile.id))
 
   useEffect(() => {
     setContextOn(settings.aiIncludeContext)
   }, [settings.aiIncludeContext])
+
+  useEffect(() => {
+    if (!settings.aiEnabled || !profile?.model || !isLocal) return
+    void ensureLocalModel(profile, { autoPull: settings.aiAutoPullLocalModels })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    settings.aiEnabled,
+    settings.aiAutoPullLocalModels,
+    profile?.id,
+    profile?.baseUrl,
+    profile?.model,
+    isLocal
+  ])
 
   useEffect(() => {
     const element = scrollRef.current
@@ -390,6 +426,72 @@ export function AiChatPanel(): React.JSX.Element {
         )}
       </div>
 
+      {isLocal && localState && localState.phase === 'checking' ? (
+        <div className="ai-local-banner checking">
+          <Loader2 size={14} className="spin" />
+          <div className="ai-local-banner-copy">
+            <strong>Checking the local model</strong>
+            <span>Looking for Ollama and {profile?.model}.</span>
+          </div>
+        </div>
+      ) : null}
+
+      {isLocal && localState && localState.phase === 'pulling' ? (
+        <div className="ai-local-banner pulling">
+          <Download size={14} />
+          <div className="ai-local-banner-copy">
+            <strong>{localPullStatusLabel(localState.progress?.status)}</strong>
+            <div className="ai-local-bar">
+              <i
+                className={localState.percent === undefined ? 'indeterminate' : undefined}
+                style={
+                  localState.percent !== undefined ? { width: `${localState.percent}%` } : undefined
+                }
+              />
+            </div>
+            <span>
+              {localState.percent !== undefined ? `${localState.percent}%` : 'Starting…'}
+              {localState.progress?.completed !== undefined && localState.progress?.total
+                ? ` · ${formatModelBytes(localState.progress.completed)} of ${formatModelBytes(localState.progress.total)}`
+                : ''}
+            </span>
+          </div>
+          <button className="btn btn-ghost btn-xs" onClick={cancelLocalModelPull}>
+            <X size={11} /> Cancel
+          </button>
+        </div>
+      ) : null}
+
+      {isLocal &&
+      localState &&
+      (localState.phase === 'missing' || localState.phase === 'error') ? (
+        <div className={cx('ai-local-banner', localState.phase)}>
+          {localState.phase === 'error' ? <ShieldCheck size={14} /> : <Download size={14} />}
+          <div className="ai-local-banner-copy">
+            <strong>
+              {localState.phase === 'error'
+                ? 'Local model download failed'
+                : 'Local model is not installed'}
+            </strong>
+            <span>{localState.error || `${profile?.model} needs to be downloaded.`}</span>
+          </div>
+          <button
+            className="btn btn-primary btn-xs"
+            onClick={() => profile && void ensureLocalModel(profile, { autoPull: true, force: true })}
+          >
+            <Download size={11} /> Download
+          </button>
+          {localState.status?.ok === false && localState.status.needsRuntime ? (
+            <button
+              className="btn btn-ghost btn-xs"
+              onClick={() => void window.tsterm.app.openExternal('https://ollama.com/download')}
+            >
+              Get Ollama
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {needsKey || !profile?.model ? (
         <div className="ai-inline-warning">
           <KeyRound size={13} />
@@ -462,7 +564,13 @@ export function AiChatPanel(): React.JSX.Element {
           ref={inputRef}
           value={draft}
           rows={2}
-          placeholder={canChat ? 'Describe the symptom or ask what to check…' : 'Choose a provider and model first'}
+          placeholder={
+            canChat
+              ? 'Describe the symptom or ask what to check…'
+              : localBlocked
+                ? 'Waiting for the local model to finish installing…'
+                : 'Choose a provider and model first'
+          }
           disabled={!canChat}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {

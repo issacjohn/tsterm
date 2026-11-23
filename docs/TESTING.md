@@ -16,6 +16,8 @@ This covers:
 - The daily GitHub update check, including throttling and failure messages.
 - AI safety rules: requests are blocked while disabled, terminal output is marked untrusted, command fills
   cannot contain line breaks or control characters, and the AI service has no execution surface.
+- Ollama status checks, loopback-only model downloads, streamed pull progress, cancellation, and model name
+  validation.
 - The Electron main/preload/renderer type boundaries.
 
 ## Unit tests
@@ -76,6 +78,21 @@ a new AI provider at a loopback mock server started by the script. It verifies:
 
 It requires no device and no real API key. Screenshots `19-ai-*.png` through `23-ai-*.png` are written to
 `screenshots/`.
+
+## Local model auto-install test
+
+`npm run test:ai-local` starts a loopback mock that implements Ollama's native `/api/version`, `/api/tags`,
+and `/api/pull` endpoints plus the OpenAI-compatible chat endpoint. It verifies:
+
+1. Enabling the assistant with an Ollama provider starts a model check automatically.
+2. A missing model triggers exactly one `/api/pull` request with the correct model and `stream: true`.
+3. Download progress appears in Settings and in the Assistant panel.
+4. The download continues after Settings is closed.
+5. Once Ollama reports the model, chat becomes available and uses that same model.
+6. The request still contains the execution ban and untrusted-data rules.
+
+Screenshots `24-ai-model-download.png` through `26-ai-auto-pulled-chat.png` are written to `screenshots/`.
+No real Ollama process or multi-gigabyte download is involved.
 
 ## Live debug cleanup test
 
