@@ -15,7 +15,10 @@ try {
   await page.waitForSelector('.app', { timeout: 30000 })
   await page.locator('button[title^="Settings"]').click()
   await page.locator('.settings-nav button', { hasText: 'About' }).click()
-  await page.getByRole('button', { name: /Check for updates/ }).click()
+  await page
+    .locator('.settings-content')
+    .getByRole('button', { name: /Check for updates/ })
+    .click()
   await page.waitForTimeout(2600)
   const body = await page.locator('body').innerText()
   const upToDate = /up to date|latest version/i.test(body)
