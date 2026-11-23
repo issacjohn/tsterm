@@ -253,5 +253,32 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keepaliveSeconds: 30,
   sftpShowHidden: true,
   reduceMotion: false,
-  autoCheckUpdates: true
+  autoCheckUpdates: true,
+  aiEnabled: false,
+  aiActiveProfileId: 'local-ollama',
+  aiIncludeContext: true,
+  aiProfiles: [
+    {
+      id: 'local-ollama',
+      name: 'Ollama (local)',
+      kind: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'llama3.2',
+      authStyle: 'none',
+      maxTokens: 1024,
+      temperature: 0.2,
+      local: true
+    },
+    {
+      id: 'local-lmstudio',
+      name: 'LM Studio (local)',
+      kind: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      model: 'local-model',
+      authStyle: 'none',
+      maxTokens: 1024,
+      temperature: 0.2,
+      local: true
+    }
+  ]
 }

@@ -14,6 +14,8 @@ This covers:
 - Runbook rendering with conditional steps.
 - Inline next-word suggestions and prompt stripping.
 - The daily GitHub update check, including throttling and failure messages.
+- AI safety rules: requests are blocked while disabled, terminal output is marked untrusted, command fills
+  cannot contain line breaks or control characters, and the AI service has no execution surface.
 - The Electron main/preload/renderer type boundaries.
 
 ## Unit tests
@@ -58,6 +60,22 @@ The smoke test:
 12. Opens a local PowerShell session.
 
 Screenshots are written to `screenshots/`.
+
+## AI smoke test
+
+`npm run test:ai` launches the app with a temporary profile, opens a local PowerShell session, and points
+a new AI provider at a loopback mock server started by the script. It verifies:
+
+1. The Assistant tab starts in the opt-in state.
+2. Enabling the assistant, adding a provider, saving an API key, and fetching models all work.
+3. A chat request reaches the mock provider with the execution ban and untrusted-data rules in the system
+   prompt.
+4. The reply is rendered as reviewable command blocks.
+5. **Fill** stages exactly one command in the terminal prompt without pressing Enter or executing it.
+6. Turning the assistant off returns the panel to the opt-in state.
+
+It requires no device and no real API key. Screenshots `19-ai-*.png` through `23-ai-*.png` are written to
+`screenshots/`.
 
 ## Live debug cleanup test
 

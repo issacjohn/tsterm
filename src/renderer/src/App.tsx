@@ -210,6 +210,17 @@ export default function App(): React.JSX.Element {
         return
       }
 
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        if (!state.settings.aiEnabled) {
+          state.setModal({ kind: 'settings', tab: 'ai' })
+          return
+        }
+        saveSettings({ showTroubleshootPanel: true })
+        state.setTroubleshootTab('assistant')
+        return
+      }
+
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') {
         event.preventDefault()
         state.setModal({ kind: 'debug' })
@@ -296,6 +307,14 @@ function handleMenuCommand(command: MenuCommand): void {
       break
     case 'troubleshoot':
       saveSettings({ showTroubleshootPanel: !state.showTroubleshoot })
+      break
+    case 'ai-assistant':
+      if (!state.settings.aiEnabled) {
+        state.setModal({ kind: 'settings', tab: 'ai' })
+      } else {
+        saveSettings({ showTroubleshootPanel: true })
+        state.setTroubleshootTab('assistant')
+      }
       break
     case 'sftp': {
       const pane = activePane(state)

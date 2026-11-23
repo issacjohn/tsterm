@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   BookOpen,
+  Bot,
   ChevronRight,
   CircleHelp,
   Copy,
@@ -24,6 +25,7 @@ import {
 import { activePane, useAppStore } from '../store'
 import { openDeviceTypePickerForPane, trackCopiedWorkflow } from '../lib/session-actions'
 import { cx, truncate } from '../lib/format'
+import { AiChatPanel } from './AiChatPanel'
 
 function severityClass(workflow: Workflow): string {
   return workflow.severity === 'danger' ? 'danger' : workflow.severity === 'caution' ? 'caution' : 'info'
@@ -51,6 +53,9 @@ function WorkflowDetail({ type, workflow, onBack }: DetailProps): React.JSX.Elem
   const hosts = useAppStore((state) => state.hosts)
   const notify = useAppStore((state) => state.notify)
   const setModal = useAppStore((state) => state.setModal)
+  const aiEnabled = useAppStore((state) => state.settings.aiEnabled)
+  const setAiDraft = useAppStore((state) => state.setAiDraft)
+  const setTroubleshootTab = useAppStore((state) => state.setTroubleshootTab)
   const [values, setValues] = useState<Record<string, string>>(() => initialValues(workflow))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const host = hosts.find((item) => item.id === pane?.hostId)
@@ -82,6 +87,17 @@ function WorkflowDetail({ type, workflow, onBack }: DetailProps): React.JSX.Elem
       hostname: host?.hostname,
       sessionId: pane?.sessionId
     })
+  }
+
+  const askAssistant = (): void => {
+    if (!aiEnabled) {
+      setModal({ kind: 'settings', tab: 'ai' })
+      return
+    }
+    setAiDraft(
+      `Review the "${workflow.title}" runbook for ${host?.label ?? pane?.title ?? 'this device'}. What should I verify before and after, what would prove the cause, and is any cleanup missing?`
+    )
+    setTroubleshootTab('assistant')
   }
 
   const copyCommands = async (): Promise<void> => {
@@ -239,6 +255,10 @@ function WorkflowDetail({ type, workflow, onBack }: DetailProps): React.JSX.Elem
           <Copy size={14} />
           Copy
         </button>
+        <button className="btn" onClick={askAssistant} title={aiEnabled ? 'Review with the AI assistant' : 'Set up the AI assistant'}>
+          <Bot size={14} />
+          Ask AI
+        </button>
       </div>
       <div className="ts-target-line">
         {pane?.status === 'connected' ? (
@@ -261,6 +281,9 @@ export function TroubleshootPanel(): React.JSX.Element {
   const pane = useAppStore(activePane)
   const catalog = useAppStore((state) => state.catalog)
   const setModal = useAppStore((state) => state.setModal)
+  const tab = useAppStore((state) => state.troubleshootTab)
+  const setTab = useAppStore((state) => state.setTroubleshootTab)
+  const aiEnabled = useAppStore((state) => state.settings.aiEnabled)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -302,7 +325,8 @@ export function TroubleshootPanel(): React.JSX.Element {
         <div className="ts-title-line">
           <div>
             <span className="eyebrow">
-              <Sparkles size={11} /> Runbooks
+              {tab === 'assistant' ? <Bot size={11} /> : <Sparkles size={11} />}
+              {tab === 'assistant' ? 'Assistant' : 'Runbooks'}
             </span>
             <h2>Troubleshoot</h2>
           </div>
@@ -321,7 +345,27 @@ export function TroubleshootPanel(): React.JSX.Element {
           ) : null}
         </div>
 
-        {type ? (
+        <div className="ts-mode-tabs" role="tablist" aria-label="Troubleshooting mode">
+          <button
+            role="tab"
+            aria-selected={tab === 'runbooks'}
+            className={tab === 'runbooks' ? 'active' : ''}
+            onClick={() => setTab('runbooks')}
+          >
+            <BookOpen size={13} /> Runbooks
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'assistant'}
+            className={tab === 'assistant' ? 'active' : ''}
+            onClick={() => setTab('assistant')}
+          >
+            <Bot size={13} /> Assistant
+            {!aiEnabled ? <span className="ts-tab-badge">off</span> : null}
+          </button>
+        </div>
+
+        {tab === 'runbooks' && type ? (
           <>
             <div className="ts-search">
               <Search size={14} />
@@ -359,67 +403,71 @@ export function TroubleshootPanel(): React.JSX.Element {
         ) : null}
       </div>
 
-      <div className="ts-body">
-        {!type ? (
-          <div className="ts-empty">
-            <div className="ts-empty-icon">
-              <Sparkles size={22} />
-            </div>
-            <h3>Pick the device type</h3>
-            <p>
-              TSTerm remembers the platform per host. Choose one now and the correct runbooks appear on
-              every future connection.
-            </p>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                const tabId = useAppStore.getState().activeTabId
-                if (tabId) openDeviceTypePickerForPane(tabId, pane.id, pane.deviceTypeId)
-              }}
-            >
-              Choose device type
-            </button>
-          </div>
-        ) : selected ? (
-          <WorkflowDetail type={type} workflow={selected} onBack={() => setSelectedId(null)} />
-        ) : hits.length === 0 ? (
-          <div className="ts-empty compact">
-            <Search size={20} />
-            <h3>No runbooks match</h3>
-            <p>
-              Try a protocol, command, or symptom. You can also add a command snippet or create a custom
-              device pack.
-            </p>
-            <button className="btn btn-sm" onClick={() => setModal({ kind: 'snippets' })}>
-              Open snippets
-            </button>
-          </div>
-        ) : (
-          <div className="ts-list">
-            {hits.map(({ workflow, category: cat }) => (
+      {tab === 'assistant' ? (
+        <AiChatPanel />
+      ) : (
+        <div className="ts-body">
+          {!type ? (
+            <div className="ts-empty">
+              <div className="ts-empty-icon">
+                <Sparkles size={22} />
+              </div>
+              <h3>Pick the device type</h3>
+              <p>
+                TSTerm remembers the platform per host. Choose one now and the correct runbooks appear on
+                every future connection.
+              </p>
               <button
-                key={workflow.id}
-                className="ts-row"
-                onClick={() => setSelectedId(workflow.id)}
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  const tabId = useAppStore.getState().activeTabId
+                  if (tabId) openDeviceTypePickerForPane(tabId, pane.id, pane.deviceTypeId)
+                }}
               >
-                <span className={cx('ts-severity', severityClass(workflow))} title={workflow.severity} />
-                <span className="ts-row-copy">
-                  <span className="ts-row-title">{workflow.title}</span>
-                  <span className="ts-row-meta">
-                    {cat.name}
-                    <i>·</i>
-                    <span className={cx('tiny-effect', effectClass(workflow))}>{effectLabel(workflow)}</span>
-                  </span>
-                </span>
-                <ChevronRight size={14} className="ts-row-arrow" />
+                Choose device type
               </button>
-            ))}
-            <div className="ts-list-foot">
-              Not finding it? <button onClick={() => setModal({ kind: 'new-device-type' })}>Add a command pack</button>
             </div>
-          </div>
-        )}
-      </div>
+          ) : selected ? (
+            <WorkflowDetail type={type} workflow={selected} onBack={() => setSelectedId(null)} />
+          ) : hits.length === 0 ? (
+            <div className="ts-empty compact">
+              <Search size={20} />
+              <h3>No runbooks match</h3>
+              <p>
+                Try a protocol, command, or symptom. You can also add a command snippet or create a custom
+                device pack.
+              </p>
+              <button className="btn btn-sm" onClick={() => setModal({ kind: 'snippets' })}>
+                Open snippets
+              </button>
+            </div>
+          ) : (
+            <div className="ts-list">
+              {hits.map(({ workflow, category: cat }) => (
+                <button
+                  key={workflow.id}
+                  className="ts-row"
+                  onClick={() => setSelectedId(workflow.id)}
+                >
+                  <span className={cx('ts-severity', severityClass(workflow))} title={workflow.severity} />
+                  <span className="ts-row-copy">
+                    <span className="ts-row-title">{workflow.title}</span>
+                    <span className="ts-row-meta">
+                      {cat.name}
+                      <i>·</i>
+                      <span className={cx('tiny-effect', effectClass(workflow))}>{effectLabel(workflow)}</span>
+                    </span>
+                  </span>
+                  <ChevronRight size={14} className="ts-row-arrow" />
+                </button>
+              ))}
+              <div className="ts-list-foot">
+                Not finding it? <button onClick={() => setModal({ kind: 'new-device-type' })}>Add a command pack</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </aside>
   )
 }

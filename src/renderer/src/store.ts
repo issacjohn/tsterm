@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from '@shared/themes'
 import type {
+  AiChatMessage,
   AppSettings,
   Bootstrap,
   CatalogBundle,
@@ -15,7 +16,15 @@ import type {
 import { create } from 'zustand'
 
 export type SidebarView = 'hosts' | 'snippets' | 'known-hosts'
-export type SettingsTab = 'appearance' | 'terminal' | 'suggestions' | 'sessions' | 'data' | 'about'
+export type SettingsTab =
+  | 'appearance'
+  | 'terminal'
+  | 'suggestions'
+  | 'sessions'
+  | 'ai'
+  | 'data'
+  | 'about'
+export type TroubleshootTab = 'runbooks' | 'assistant'
 
 export interface PendingConnect {
   hostId: string
@@ -105,6 +114,10 @@ export interface AppStore {
   knownHosts: KnownHost[]
   catalog: CatalogBundle
   debugSessions: DebugSession[]
+  aiKeyIds: string[]
+  aiMessages: AiChatMessage[]
+  aiDraft: string
+  troubleshootTab: TroubleshootTab
   tabs: TabState[]
   activeTabId: string | null
   sidebarView: SidebarView
@@ -121,6 +134,11 @@ export interface AppStore {
   setKnownHosts: (knownHosts: KnownHost[]) => void
   setCatalog: (catalog: CatalogBundle) => void
   setDebugSessions: (sessions: DebugSession[]) => void
+  setAiKeyIds: (keyIds: string[]) => void
+  setAiMessages: (messages: AiChatMessage[]) => void
+  setAiDraft: (draft: string) => void
+  clearAiChat: () => void
+  setTroubleshootTab: (tab: TroubleshootTab) => void
   setModal: (modal: ModalState) => void
   setSidebarView: (view: SidebarView) => void
   setShowSidebar: (show: boolean) => void
@@ -160,6 +178,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   knownHosts: [],
   catalog: { types: [], issues: [], loadedAt: new Date().toISOString() },
   debugSessions: [],
+  aiKeyIds: [],
+  aiMessages: [],
+  aiDraft: '',
+  troubleshootTab: 'runbooks',
   tabs: [],
   activeTabId: null,
   sidebarView: 'hosts',
@@ -179,6 +201,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       knownHosts: bootstrap.knownHosts,
       catalog: bootstrap.catalog,
       debugSessions: bootstrap.debugSessions,
+      aiKeyIds: bootstrap.aiKeyIds,
       showSidebar: bootstrap.settings.showSidebar,
       showTroubleshoot: bootstrap.settings.showTroubleshootPanel,
       appPlatform: bootstrap.platform
@@ -194,6 +217,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setKnownHosts: (knownHosts) => set({ knownHosts }),
   setCatalog: (catalog) => set({ catalog }),
   setDebugSessions: (debugSessions) => set({ debugSessions }),
+  setAiKeyIds: (aiKeyIds) => set({ aiKeyIds }),
+  setAiMessages: (aiMessages) => set({ aiMessages }),
+  setAiDraft: (aiDraft) => set({ aiDraft }),
+  clearAiChat: () => set({ aiMessages: [], aiDraft: '' }),
+  setTroubleshootTab: (troubleshootTab) => set({ troubleshootTab }),
   setModal: (modal) => set({ modal }),
   setSidebarView: (sidebarView) => set({ sidebarView }),
   setShowSidebar: (showSidebar) => set({ showSidebar }),

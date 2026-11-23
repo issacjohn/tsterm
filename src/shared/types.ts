@@ -27,6 +27,7 @@ export type MenuCommand =
   | 'new-local'
   | 'settings'
   | 'troubleshoot'
+  | 'ai-assistant'
   | 'sftp'
   | 'close-tab'
   | 'reconnect'
@@ -351,7 +352,63 @@ export interface AppSettings {
   reduceMotion: boolean
   autoCheckUpdates: boolean
   skippedUpdateVersion?: string
+  aiEnabled: boolean
+  aiActiveProfileId?: string
+  aiProfiles: AiProfile[]
+  aiIncludeContext: boolean
 }
+
+export type AiProviderKind = 'openai-compatible' | 'anthropic'
+export type AiAuthStyle = 'bearer' | 'x-api-key' | 'api-key' | 'none'
+
+export interface AiProfile {
+  id: string
+  name: string
+  kind: AiProviderKind
+  baseUrl: string
+  model: string
+  authStyle: AiAuthStyle
+  maxTokens: number
+  temperature: number
+  local: boolean
+}
+
+export interface AiChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AiChatContext {
+  deviceTypeName?: string
+  vendor?: string
+  family?: string
+  hostLabel?: string
+  deviceNotes?: string[]
+  terminalTail?: string
+  currentCommand?: string
+  runbookHints?: string[]
+}
+
+export interface AiChatRequest {
+  requestId: string
+  profileId: string
+  messages: AiChatMessage[]
+  context: AiChatContext
+  includeContext: boolean
+}
+
+export type AiChatResult =
+  | { ok: true; text: string }
+  | { ok: false; error: string; cancelled?: boolean }
+
+export interface AiModelsRequest {
+  profile: AiProfile
+  apiKey?: string
+}
+
+export type AiModelsResult =
+  | { ok: true; models: string[] }
+  | { ok: false; error: string }
 
 export interface UpdateInfo {
   currentVersion: string
@@ -506,6 +563,7 @@ export interface Bootstrap {
   knownHosts: KnownHost[]
   catalog: CatalogBundle
   debugSessions: DebugSession[]
+  aiKeyIds: string[]
   warnings?: string[]
 }
 
@@ -599,5 +657,13 @@ export interface TstermApi {
   }
   updates: {
     check(force?: boolean): Promise<UpdateCheckResult>
+  }
+  ai: {
+    chat(request: AiChatRequest): Promise<AiChatResult>
+    listModels(request: AiModelsRequest): Promise<AiModelsResult>
+    saveKey(profileId: string, key: string): Promise<string[]>
+    deleteKey(profileId: string): Promise<string[]>
+    keyIds(): Promise<string[]>
+    cancel(requestId: string): Promise<void>
   }
 }

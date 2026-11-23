@@ -33,6 +33,7 @@ No browser tabs full of half-remembered commands. No forgotten `undebug all` at 
 - Copy on select, right-click copy/paste, clickable links, Ctrl+F search, and font zoom.
 - SFTP browser, local port forwarding, jump hosts, session logs, known-host pinning, and encrypted credentials.
 - Session logging and a configurable keepalive.
+- An optional AI troubleshooting partner that can suggest and stage commands but can never execute them.
 
 ### Device-aware runbooks
 
@@ -64,6 +65,32 @@ and **cleanup commands**. Debug and capture workflows are not allowed to load wi
 As you type, TSTerm shows a dim completion after the cursor — never as bright as what you have typed.
 Predictions come from the active device pack, your snippets, and recent commands in the session.
 `Tab` accepts, `Esc` dismisses. Password prompts and full-screen programs are excluded.
+
+### Optional AI troubleshooting partner
+
+![AI assistant](screenshots/21-ai-chat.png)
+
+TSTerm can hold a troubleshooting conversation with a **local model (Ollama or LM Studio)** or a provider
+you already subscribe to. It is **off by default** and is configured separately in
+**Settings → AI assistant**.
+
+The boundary is deliberate and enforced in the app architecture:
+
+- The AI process has **no terminal, SSH, file, or IPC execution access**.
+- It returns text and fenced command blocks. You review every line.
+- **Fill** writes exactly one line into the current prompt and never presses Enter. It refuses to write
+  when the terminal is at a password prompt or inside a full-screen program.
+- Command parsing strips device prompts, ANSI sequences, control characters, and bidi overrides.
+- `Copy` and `Snippet` are explicit actions; nothing runs automatically.
+- Context is opt-in. When enabled, TSTerm sends the device type, matching runbook hints, the current
+  command line, and the last 80 terminal lines. Common password/secret fields are redacted first.
+
+Cloud API keys are encrypted with Electron `safeStorage` and are never returned to the renderer. Local
+endpoints such as `http://127.0.0.1:11434/v1` keep the conversation on your machine. Each request goes
+through the Electron main process, so the renderer never receives terminal-execution capability.
+
+Runbook details include an **Ask AI** action that opens the assistant with that workflow as the topic, so
+you can ask what to verify before and after without retyping the commands.
 
 ### The debug guard
 
@@ -174,6 +201,7 @@ menu → **Set device type**.
 | Settings | `Ctrl/Cmd + ,` |
 | Close tab | `Ctrl/Cmd + Shift + W` |
 | Toggle troubleshooting panel | `Ctrl + Shift + K` |
+| AI assistant (or setup) | `Ctrl + Shift + A` |
 | Debug guard | `Ctrl + Shift + D` |
 | Find in terminal | `Ctrl + F` |
 | Copy / paste terminal selection | `Ctrl + Shift + C` / `Ctrl + Shift + V` (macOS: `Cmd + C/V`) |
@@ -235,7 +263,8 @@ npm run build
 ```
 
 There are tests for catalog loading and inheritance, runbook rendering, variable validation, the inline
-suggestion engine, and the daily GitHub update check.
+suggestion engine, the daily GitHub update check, AI command parsing and secret redaction, and the AI
+execution boundary.
 
 The UI smoke test drives the real Electron app, creates a host, connects over SSH, checks the device-type
 and host-key prompts, verifies the remembered type on a second connection, types a command, exercises
@@ -249,9 +278,12 @@ TSTERM_TEST_PASSWORD=secret \
 npm run test:ui
 ```
 
-Two more opt-in tests are included:
+Several opt-in tests are included:
 
 ```bash
+# Runs the AI opt-in, provider, key, chat, and fill-without-Enter flow against a local mock model
+npm run test:ai
+
 # Starts a real RADIUS debug, quits through the guard, and checks the cleanup with show debug
 npm run test:debug-guard
 
@@ -263,6 +295,7 @@ npm run test:packaged
 ```
 
 The debug test is the only one that changes a device, and it restores the debug state before it finishes.
+The AI test uses a loopback mock server and never contacts a real provider.
 See [docs/TESTING.md](docs/TESTING.md) for the details.
 
 **Lab verification:** the included UI tests and a live debug-cleanup test were run against a
@@ -291,6 +324,8 @@ Think before you paste. The catalog is a knowledgeable assistant, not a substitu
 - SSH host keys use SHA-256 fingerprints with strict checking by default.
 - The only automatic network call is the daily GitHub release check. There is no telemetry, account, or
   cloud sync.
+- The AI assistant is disabled by default. When enabled, it only talks to the provider you configure and
+  only when you send a message. It cannot execute commands; fills never include Enter.
 - Session logs and exports are local files. Treat them as sensitive.
 - Custom device packs run with the same privileges as the app. Only import packs you trust.
 

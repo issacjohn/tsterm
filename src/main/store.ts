@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto'
 import { safeStorage } from 'electron'
 import { DEFAULT_SETTINGS, TERMINAL_THEMES } from '@shared/themes'
 import type {
+  AiAuthStyle,
+  AiProfile,
+  AiProviderKind,
   AppPaths,
   AppSettings,
   DebugSession,
@@ -22,7 +25,13 @@ const FILES = {
   snippets: 'snippets.json',
   knownHosts: 'known_hosts.json',
   debugSessions: 'debug_sessions.json',
-  secrets: 'secrets.json'
+  secrets: 'secrets.json',
+  aiSecrets: 'ai-secrets.json'
+}
+
+interface AiSecretsFile {
+  version: 1
+  values: Record<string, string>
 }
 
 interface StoredSecret {
@@ -54,6 +63,56 @@ function clamp(value: number, min: number, max: number): number {
 
 interface UpdateState {
   lastCheckedAt?: string
+}
+
+function sanitizeAiProfiles(value: unknown): AiProfile[] {
+  if (value === undefined) return structuredClone(DEFAULT_SETTINGS.aiProfiles)
+  if (!Array.isArray(value)) return structuredClone(DEFAULT_SETTINGS.aiProfiles)
+  const profiles: AiProfile[] = []
+  const ids = new Set<string>()
+  for (const item of value.slice(0, 16)) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Partial<AiProfile>
+    const id = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : ''
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id) || ids.has(id)) continue
+    let baseUrl = typeof raw.baseUrl === 'string' ? raw.baseUrl.trim() : ''
+    try {
+      const parsed = new URL(baseUrl)
+      if (!['http:', 'https:'].includes(parsed.protocol)) continue
+    } catch {
+      continue
+    }
+    const kind: AiProviderKind = raw.kind === 'anthropic' ? 'anthropic' : 'openai-compatible'
+    const authStyle: AiAuthStyle =
+      raw.authStyle === 'x-api-key' || raw.authStyle === 'api-key' || raw.authStyle === 'none'
+        ? raw.authStyle
+        : 'bearer'
+    const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : id
+    const model = typeof raw.model === 'string' ? raw.model.trim().slice(0, 120) : ''
+    const maxTokens = Math.round(clamp(Number(raw.maxTokens) || 1024, 64, 8192))
+    const temperature = clamp(Number(raw.temperature) || 0, 0, 2)
+    let local = Boolean(raw.local)
+    try {
+      const host = new URL(baseUrl).hostname
+      local = local || ['127.0.0.1', 'localhost', '::1'].includes(host)
+    } catch {
+      // baseUrl already validated
+    }
+    ids.add(id)
+    profiles.push({
+      id,
+      name,
+      kind,
+      baseUrl: baseUrl.replace(/\/+$/, ''),
+      model,
+      authStyle,
+      maxTokens,
+      temperature,
+      local
+    })
+  }
+  if (value.length > 0 && profiles.length === 0) return structuredClone(DEFAULT_SETTINGS.aiProfiles)
+  return profiles
 }
 
 function sanitizeSettings(input: unknown): AppSettings {
@@ -92,6 +151,15 @@ function sanitizeSettings(input: unknown): AppSettings {
   merged.localShell = asString(merged.localShell, '')
   merged.localShellArgs = asStringArray(merged.localShellArgs, [])
   merged.skippedUpdateVersion = asString(merged.skippedUpdateVersion, '') || undefined
+  merged.aiProfiles = sanitizeAiProfiles(raw.aiProfiles)
+  merged.aiActiveProfileId = asString(merged.aiActiveProfileId, '') || undefined
+  if (
+    merged.aiActiveProfileId &&
+    !merged.aiProfiles.some((profile) => profile.id === merged.aiActiveProfileId)
+  ) {
+    merged.aiActiveProfileId = merged.aiProfiles[0]?.id
+  }
+  if (!merged.aiActiveProfileId) merged.aiActiveProfileId = merged.aiProfiles[0]?.id
   merged.schemaVersion = 1
 
   const boolKeys: Array<keyof AppSettings> = [
@@ -108,7 +176,9 @@ function sanitizeSettings(input: unknown): AppSettings {
     'clickableLinks',
     'sftpShowHidden',
     'reduceMotion',
-    'autoCheckUpdates'
+    'autoCheckUpdates',
+    'aiEnabled',
+    'aiIncludeContext'
   ]
   const mergedRecord = merged as unknown as Record<string, unknown>
   const defaultsRecord = DEFAULT_SETTINGS as unknown as Record<string, unknown>
@@ -133,7 +203,9 @@ export class Store {
   private knownHosts: KnownHost[] = []
   private debugSessions: DebugSession[] = []
   private secrets: SecretsFile
+  private aiSecrets: AiSecretsFile
   private ephemeral = new Map<string, StoredSecret>()
+  private aiEphemeral = new Map<string, string>()
 
   constructor(baseDir: string) {
     this.paths = {
@@ -155,6 +227,8 @@ export class Store {
     this.debugSessions = this.readJson<DebugSession[]>(FILES.debugSessions, []).filter(Boolean)
     this.secrets = this.readJson<SecretsFile>(FILES.secrets, { version: 1, values: {} })
     if (!this.secrets.values) this.secrets = { version: 1, values: {} }
+    this.aiSecrets = this.readJson<AiSecretsFile>(FILES.aiSecrets, { version: 1, values: {} })
+    if (!this.aiSecrets.values) this.aiSecrets = { version: 1, values: {} }
     this.refreshHostSecretFlags()
   }
 
@@ -213,7 +287,7 @@ export class Store {
   }
 
   resetSettings(): AppSettings {
-    this.settings = { ...DEFAULT_SETTINGS }
+    this.settings = structuredClone(DEFAULT_SETTINGS)
     this.writeJson(FILES.settings, this.settings)
     return this.getSettings()
   }
@@ -343,6 +417,47 @@ export class Store {
     } catch {
       return null
     }
+  }
+
+  getAiKeyIds(): string[] {
+    return [...new Set([...Object.keys(this.aiSecrets.values), ...this.aiEphemeral.keys()])].sort()
+  }
+
+  getAiKey(profileId: string): string | undefined {
+    if (this.aiEphemeral.has(profileId)) return this.aiEphemeral.get(profileId)
+    const encrypted = this.aiSecrets.values[profileId]
+    if (!encrypted) return undefined
+    try {
+      if (!safeStorage.isEncryptionAvailable()) return undefined
+      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+    } catch {
+      return undefined
+    }
+  }
+
+  saveAiKey(profileId: string, key: string): boolean {
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(profileId)) throw new Error('Invalid AI profile id.')
+    const value = key.trim().slice(0, 8192)
+    if (!value) return false
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        this.aiSecrets.values[profileId] = safeStorage.encryptString(value).toString('base64')
+        this.aiEphemeral.delete(profileId)
+        this.writeJson(FILES.aiSecrets, this.aiSecrets)
+        return true
+      }
+    } catch {
+      // fall through to session-only
+    }
+    this.aiEphemeral.set(profileId, value)
+    return false
+  }
+
+  deleteAiKey(profileId: string): void {
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(profileId)) throw new Error('Invalid AI profile id.')
+    delete this.aiSecrets.values[profileId]
+    this.aiEphemeral.delete(profileId)
+    this.writeJson(FILES.aiSecrets, this.aiSecrets)
   }
 
   getSecretsForExport(): Record<string, StoredSecret> {

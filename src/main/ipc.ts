@@ -23,6 +23,7 @@ import type { SftpService } from './sftp'
 import type { ForwardManager } from './forwarding'
 import type { QuitCoordinator } from './quit'
 import type { UpdateService } from './updates'
+import type { AiService } from './ai'
 
 export interface IpcServices {
   store: Store
@@ -33,6 +34,7 @@ export interface IpcServices {
   forwards: ForwardManager
   quit: QuitCoordinator
   updates: UpdateService
+  ai: AiService
   getWindow: () => BrowserWindow | null
 }
 
@@ -57,7 +59,7 @@ function asPort(value: unknown, fallback: number): number {
 }
 
 export function registerIpc(services: IpcServices): void {
-  const { store, catalog, sessions, debug, sftp, forwards, quit, updates } = services
+  const { store, catalog, sessions, debug, sftp, forwards, quit, updates, ai } = services
 
   const openDialog = (
     options: Electron.OpenDialogOptions
@@ -84,6 +86,7 @@ export function registerIpc(services: IpcServices): void {
       knownHosts: store.getKnownHosts(),
       catalog: catalog.get(),
       debugSessions: debug.list(),
+      aiKeyIds: store.getAiKeyIds(),
       warnings: [...store.warnings]
     }
   })
@@ -327,6 +330,21 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle('updates:check', (_event, force?: boolean) => {
     return updates.check(Boolean(force))
+  })
+
+  ipcMain.handle('ai:chat', (_event, request) => ai.chat(request))
+  ipcMain.handle('ai:list-models', (_event, request) => ai.listModels(request))
+  ipcMain.handle('ai:save-key', (_event, profileId: string, key: string) => {
+    store.saveAiKey(requiredString(profileId, 'AI profile id'), requiredString(key, 'API key'))
+    return store.getAiKeyIds()
+  })
+  ipcMain.handle('ai:delete-key', (_event, profileId: string) => {
+    store.deleteAiKey(requiredString(profileId, 'AI profile id'))
+    return store.getAiKeyIds()
+  })
+  ipcMain.handle('ai:key-ids', () => store.getAiKeyIds())
+  ipcMain.handle('ai:cancel', (_event, requestId: string) => {
+    if (requestId) ai.cancel(requestId)
   })
 
   ipcMain.handle('app:quit', (_event, action: QuitAction) => {

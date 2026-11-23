@@ -10,6 +10,7 @@ import { SftpService } from './sftp'
 import { ForwardManager } from './forwarding'
 import { QuitCoordinator } from './quit'
 import { UpdateService } from './updates'
+import { AiService } from './ai'
 import { registerIpc, sendMenuCommand } from './ipc'
 
 app.setName('TSTerm')
@@ -27,6 +28,7 @@ let sftp: SftpService
 let forwards: ForwardManager
 let quit: QuitCoordinator
 let updates: UpdateService
+let ai: AiService
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -71,6 +73,7 @@ function buildMenu(): void {
         command('Reconnect', 'reconnect', 'CmdOrCtrl+Shift+R'),
         command('SFTP Browser', 'sftp', 'CmdOrCtrl+Shift+S'),
         command('Troubleshoot Panel', 'troubleshoot'),
+        command('AI Assistant', 'ai-assistant'),
         { type: 'separator' },
         command('Command Palette', 'command-palette', 'CmdOrCtrl+Shift+P'),
         command('Keyboard Shortcuts', 'shortcuts', 'F1')
@@ -177,6 +180,7 @@ async function boot(): Promise<void> {
   sftp = new SftpService(sessions)
   forwards = new ForwardManager(sessions, (forward) => send('forward:changed', forward))
   updates = new UpdateService(store, app.getVersion())
+  ai = new AiService(store)
   quit = new QuitCoordinator(debug, sessions)
   registerIpc({
     store,
@@ -187,6 +191,7 @@ async function boot(): Promise<void> {
     forwards,
     quit,
     updates,
+    ai,
     getWindow: () => mainWindow
   })
   buildMenu()

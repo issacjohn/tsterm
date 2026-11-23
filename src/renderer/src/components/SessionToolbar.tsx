@@ -1,4 +1,5 @@
 import {
+  Bot,
   Columns2,
   Copy,
   Eraser,
@@ -14,6 +15,7 @@ import {
   deviceTypeForSession,
   openDeviceTypePickerForPane,
   reconnectPane,
+  saveSettings,
   splitActivePane
 } from '../lib/session-actions'
 import { clearTerminal, copySelection, focusTerminal } from '../lib/terminal-registry'
@@ -166,6 +168,19 @@ export function SessionToolbar({ onToggleTroubleshoot }: SessionToolbarProps): R
           <Eraser size={16} />
         </button>
         <span className="toolbar-sep" />
+        <button
+          className={cx(
+            'icon-btn',
+            state.showTroubleshoot && state.troubleshootTab === 'assistant' && 'active-toggle'
+          )}
+          title="AI assistant (Ctrl+Shift+A)"
+          onClick={() => {
+            if (!state.showTroubleshoot) saveSettings({ showTroubleshootPanel: true })
+            state.setTroubleshootTab('assistant')
+          }}
+        >
+          <Bot size={16} />
+        </button>
         <button
           className={cx('icon-btn', state.showTroubleshoot && 'active-toggle')}
           title="Toggle troubleshooting panel"

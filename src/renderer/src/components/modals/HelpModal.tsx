@@ -23,6 +23,7 @@ export function HelpModal(): React.JSX.Element {
     ['Settings', `${mod} ,`, 'Appearance, fonts, sessions'],
     ['Close tab', `${mod} Shift W`, 'Closes the active tab'],
     ['Toggle troubleshooting', `${mod} Shift K`, 'Show or hide the runbook panel'],
+    ['AI assistant', `${mod} Shift A`, 'Optional chat partner — never runs commands'],
     ['Debug guard', `${mod} Shift D`, 'Review and clean up debugs'],
     ['Quit TSTerm', `${mod} Q`, 'Asks before leaving debugs running'],
     ['Keyboard shortcuts', 'F1', 'This dialog'],

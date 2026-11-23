@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Bot,
   Braces,
   Coffee,
   FolderKey,
@@ -93,6 +94,22 @@ export function CommandPalette(): React.JSX.Element {
         icon: PanelRight,
         shortcut: 'Ctrl Shift K',
         run: () => saveSettings({ showTroubleshootPanel: !state.showTroubleshoot })
+      },
+      {
+        id: 'ai-assistant',
+        label: state.settings.aiEnabled ? 'Open AI assistant' : 'Set up AI assistant',
+        category: 'Assistant',
+        keywords: 'ai chat troubleshoot local ollama lm studio provider openai anthropic',
+        icon: Bot,
+        shortcut: 'Ctrl Shift A',
+        run: () => {
+          if (!state.settings.aiEnabled) {
+            state.setModal({ kind: 'settings', tab: 'ai' })
+            return
+          }
+          saveSettings({ showTroubleshootPanel: true })
+          state.setTroubleshootTab('assistant')
+        }
       },
       {
         id: 'snippets',

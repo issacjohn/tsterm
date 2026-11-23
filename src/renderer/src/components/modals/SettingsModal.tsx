@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   Activity,
   BellOff,
+  Bot,
   BookOpen,
   Check,
   ChevronRight,
@@ -11,17 +12,22 @@ import {
   ExternalLink,
   FolderOpen,
   Gauge,
+  KeyRound,
   Keyboard,
+  Loader2,
   Palette,
+  Plus,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
   Sparkles,
   Terminal,
+  Trash2,
   Upload,
-  Wifi
+  Wifi,
+  X
 } from 'lucide-react'
-import type { AppSettings, AppThemeId, TerminalTheme } from '@shared/types'
+import type { AiProfile, AppSettings, AppThemeId, TerminalTheme } from '@shared/types'
 import { getTerminalTheme, TERMINAL_THEMES } from '@shared/themes'
 import { useAppStore, type SettingsTab } from '../../store'
 import { saveSettings } from '../../lib/session-actions'
@@ -233,8 +239,10 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
   const catalog = useAppStore((state) => state.catalog)
   const knownHosts = useAppStore((state) => state.knownHosts)
   const debugSessions = useAppStore((state) => state.debugSessions)
+  const aiKeyIds = useAppStore((state) => state.aiKeyIds)
   const setCatalog = useAppStore((state) => state.setCatalog)
   const setHosts = useAppStore((state) => state.setHosts)
+  const setAiKeyIds = useAppStore((state) => state.setAiKeyIds)
   const setModal = useAppStore((state) => state.setModal)
   const notify = useAppStore((state) => state.notify)
   const [activeTab, setActiveTab] = useState<SettingsTab>(tab)
@@ -242,21 +250,171 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
   const [reloadBusy, setReloadBusy] = useState(false)
   const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const [updateError, setUpdateError] = useState(false)
+  const [profileDraft, setProfileDraft] = useState<AiProfile | null>(null)
+  const [keyDraft, setKeyDraft] = useState('')
+  const [keyVisible, setKeyVisible] = useState(false)
+  const [models, setModels] = useState<string[]>([])
+  const [modelBusy, setModelBusy] = useState(false)
+  const [modelError, setModelError] = useState<string | null>(null)
   const theme = getTerminalTheme(settings)
 
   const update = (patch: Partial<AppSettings>): void => saveSettings(patch)
+
+  const activeProfile =
+    settings.aiProfiles.find((profile) => profile.id === settings.aiActiveProfileId) ??
+    settings.aiProfiles[0]
+
+  useEffect(() => {
+    setProfileDraft(activeProfile ? { ...activeProfile } : null)
+    setKeyDraft('')
+    setKeyVisible(false)
+    setModels([])
+    setModelError(null)
+    // Only reset the editor when the selected provider changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id])
+
+  const patchProfile = (patch: Partial<AiProfile>): void => {
+    setProfileDraft((current) => (current ? { ...current, ...patch } : current))
+  }
+
+  const profileIsDirty = Boolean(
+    profileDraft &&
+      activeProfile &&
+      (profileDraft.name !== activeProfile.name ||
+        profileDraft.kind !== activeProfile.kind ||
+        profileDraft.baseUrl !== activeProfile.baseUrl ||
+        profileDraft.model !== activeProfile.model ||
+        profileDraft.authStyle !== activeProfile.authStyle ||
+        profileDraft.maxTokens !== activeProfile.maxTokens ||
+        profileDraft.temperature !== activeProfile.temperature)
+  )
+
+  const saveProfile = (): void => {
+    if (!profileDraft) return
+    let parsed: URL
+    try {
+      parsed = new URL(profileDraft.baseUrl.trim())
+    } catch {
+      notify({ kind: 'error', title: 'Invalid base URL', message: 'Use a full http:// or https:// URL.' })
+      return
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      notify({ kind: 'error', title: 'Invalid base URL', message: 'AI provider URLs must use http or https.' })
+      return
+    }
+    if (!profileDraft.name.trim()) {
+      notify({ kind: 'warning', title: 'Name required', message: 'Give this provider a name.' })
+      return
+    }
+    const next: AiProfile = {
+      ...profileDraft,
+      name: profileDraft.name.trim().slice(0, 80),
+      baseUrl: profileDraft.baseUrl.trim().replace(/\/+$/, ''),
+      model: profileDraft.model.trim().slice(0, 200),
+      maxTokens: Math.min(8192, Math.max(64, Math.round(profileDraft.maxTokens) || 1024)),
+      temperature: Math.min(2, Math.max(0, Number(profileDraft.temperature) || 0)),
+      local: ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)
+    }
+    update({
+      aiProfiles: settings.aiProfiles.map((profile) => (profile.id === next.id ? next : profile))
+    })
+    setProfileDraft(next)
+    notify({ kind: 'success', title: 'Provider saved', message: next.name })
+  }
+
+  const addProfile = (): void => {
+    const id = `custom-${Date.now().toString(36)}`
+    const profile: AiProfile = {
+      id,
+      name: 'Custom provider',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      model: '',
+      authStyle: 'bearer',
+      maxTokens: 1024,
+      temperature: 0.2,
+      local: false
+    }
+    update({ aiProfiles: [...settings.aiProfiles, profile], aiActiveProfileId: id })
+  }
+
+  const removeProfile = (): void => {
+    if (!activeProfile || settings.aiProfiles.length <= 1) return
+    if (!window.confirm(`Remove the provider "${activeProfile.name}"?\n\nThe saved API key is not deleted automatically.`)) return
+    const remaining = settings.aiProfiles.filter((profile) => profile.id !== activeProfile.id)
+    update({ aiProfiles: remaining, aiActiveProfileId: remaining[0]?.id })
+  }
+
+  const saveKey = async (): Promise<void> => {
+    if (!activeProfile || !keyDraft.trim()) return
+    try {
+      const ids = await window.tsterm.ai.saveKey(activeProfile.id, keyDraft.trim())
+      setAiKeyIds(ids)
+      setKeyDraft('')
+      setKeyVisible(false)
+      notify({
+        kind: 'success',
+        title: 'API key saved',
+        message: 'It is encrypted with the operating system keychain and never shown again.'
+      })
+    } catch (error) {
+      notify({ kind: 'error', title: 'Could not save key', message: (error as Error).message })
+    }
+  }
+
+  const removeKey = async (): Promise<void> => {
+    if (!activeProfile) return
+    try {
+      const ids = await window.tsterm.ai.deleteKey(activeProfile.id)
+      setAiKeyIds(ids)
+      notify({ kind: 'info', title: 'API key removed' })
+    } catch (error) {
+      notify({ kind: 'error', title: 'Could not remove key', message: (error as Error).message })
+    }
+  }
+
+  const fetchModels = async (): Promise<void> => {
+    if (!profileDraft) return
+    setModelBusy(true)
+    setModelError(null)
+    setModels([])
+    try {
+      const result = await window.tsterm.ai.listModels({
+        profile: profileDraft,
+        apiKey: keyDraft.trim() || undefined
+      })
+      if (result.ok) {
+        setModels(result.models)
+        if (!profileDraft.model && result.models[0]) patchProfile({ model: result.models[0] })
+      } else {
+        setModelError(result.error)
+      }
+    } catch (error) {
+      setModelError((error as Error).message)
+    } finally {
+      setModelBusy(false)
+    }
+  }
 
   const navItems: Array<{ id: SettingsTab; label: string; icon: typeof Palette }> = [
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'terminal', label: 'Terminal', icon: Terminal },
     { id: 'suggestions', label: 'Typing', icon: Sparkles },
     { id: 'sessions', label: 'Sessions', icon: Wifi },
+    { id: 'ai', label: 'AI assistant', icon: Bot },
     { id: 'data', label: 'Data & packs', icon: Database },
     { id: 'about', label: 'About', icon: BookOpen }
   ]
 
   const resetDefaults = (): void => {
-    if (!window.confirm('Reset every appearance and session setting to its default?\n\nHosts, snippets, and device packs are not affected.')) return
+    if (
+      !window.confirm(
+        'Reset every appearance, session, and AI provider setting to its default?\n\nAI turns off. Hosts, snippets, device packs, and saved API keys are not affected.'
+      )
+    ) {
+      return
+    }
     void window.tsterm.settings.reset().then((fresh) => useAppStore.getState().setSettings(fresh))
     notify({ kind: 'info', title: 'Settings reset', message: 'Defaults restored.' })
   }
@@ -661,6 +819,291 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                   <p>Passwords are encrypted using Electron safeStorage. Jump hosts reuse their saved credentials.</p>
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'ai' ? (
+            <div className="settings-section">
+              <div className="settings-heading">
+                <h3>AI troubleshooting assistant</h3>
+                <p>
+                  An optional thinking partner. It can read the device type and, if you allow it, recent
+                  terminal output — but it has no ability to run commands.
+                </p>
+              </div>
+
+              <div className={cx('ai-settings-hero', settings.aiEnabled && 'on')}>
+                <span className="ai-settings-hero-icon">
+                  <Bot size={20} />
+                </span>
+                <div className="ai-settings-hero-copy">
+                  <strong>{settings.aiEnabled ? 'AI assistant is on' : 'AI assistant is off'}</strong>
+                  <span>
+                    {settings.aiEnabled
+                      ? 'The Assistant tab is available. It can suggest and fill commands; you press Enter.'
+                      : 'Nothing is sent anywhere until you turn this on and choose a provider.'}
+                  </span>
+                </div>
+                <button
+                  className={cx('switch', settings.aiEnabled && 'on')}
+                  role="switch"
+                  aria-checked={settings.aiEnabled}
+                  aria-label="Enable AI assistant"
+                  onClick={() => update({ aiEnabled: !settings.aiEnabled })}
+                >
+                  <span />
+                </button>
+              </div>
+
+              {settings.aiEnabled ? (
+                <>
+                  <SettingToggle
+                    checked={settings.aiIncludeContext}
+                    onChange={(value) => update({ aiIncludeContext: value })}
+                    label="Include device and terminal context"
+                    description="Adds the device pack, matching runbooks, the current command line, and the last 80 terminal lines. Passwords and common secret fields are redacted."
+                  />
+
+                  <div className="settings-note-card ai-guardrail-card">
+                    <ShieldCheck size={15} />
+                    <div>
+                      <strong>The assistant cannot execute anything</strong>
+                      <p>
+                        It has no terminal, SSH, or file access. Suggested commands appear in the chat;
+                        filling the prompt writes one line without pressing Enter, and only when you click.
+                        Every execution stays yours.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="settings-subhead">
+                    <h4>Provider</h4>
+                    <span>{settings.aiProfiles.length} configured</span>
+                  </div>
+                  <div className="ai-provider-picker">
+                    <select
+                      value={activeProfile?.id ?? ''}
+                      onChange={(event) => {
+                        if (profileIsDirty && !window.confirm('Discard unsaved provider changes?')) return
+                        update({ aiActiveProfileId: event.target.value })
+                      }}
+                      aria-label="Active AI provider"
+                    >
+                      {settings.aiProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                          {profile.local && !/local/i.test(profile.name) ? ' (local)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn btn-sm" onClick={addProfile}>
+                      <Plus size={13} /> Add provider
+                    </button>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      onClick={removeProfile}
+                      disabled={settings.aiProfiles.length <= 1}
+                      title="Remove this provider"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+
+                  {profileDraft ? (
+                    <div className="ai-profile-editor">
+                      <div className="ai-profile-grid">
+                        <label>
+                          <span>Name</span>
+                          <input
+                            value={profileDraft.name}
+                            onChange={(event) => patchProfile({ name: event.target.value })}
+                            spellCheck={false}
+                          />
+                        </label>
+                        <label>
+                          <span>API style</span>
+                          <select
+                            value={profileDraft.kind}
+                            onChange={(event) =>
+                              patchProfile({
+                                kind: event.target.value === 'anthropic' ? 'anthropic' : 'openai-compatible'
+                              })
+                            }
+                          >
+                            <option value="openai-compatible">OpenAI compatible</option>
+                            <option value="anthropic">Anthropic messages</option>
+                          </select>
+                        </label>
+                        <label className="wide">
+                          <span>Base URL</span>
+                          <input
+                            value={profileDraft.baseUrl}
+                            onChange={(event) => patchProfile({ baseUrl: event.target.value })}
+                            placeholder="http://127.0.0.1:11434/v1"
+                            spellCheck={false}
+                          />
+                          <small>
+                            Ollama: http://127.0.0.1:11434/v1 · LM Studio: http://127.0.0.1:1234/v1 ·
+                            Cloud: your provider's API base.
+                          </small>
+                        </label>
+                        <label>
+                          <span>Auth header</span>
+                          <select
+                            value={profileDraft.authStyle}
+                            onChange={(event) =>
+                              patchProfile({
+                                authStyle:
+                                  event.target.value === 'x-api-key' ||
+                                  event.target.value === 'api-key' ||
+                                  event.target.value === 'none'
+                                    ? event.target.value
+                                    : 'bearer'
+                              })
+                            }
+                          >
+                            <option value="bearer">Authorization: Bearer</option>
+                            <option value="x-api-key">x-api-key</option>
+                            <option value="api-key">api-key</option>
+                            <option value="none">No authentication</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Max tokens</span>
+                          <input
+                            type="number"
+                            min={64}
+                            max={8192}
+                            value={profileDraft.maxTokens}
+                            onChange={(event) => patchProfile({ maxTokens: Number(event.target.value) })}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="ai-model-row">
+                        <label>
+                          <span>Model</span>
+                          <input
+                            value={profileDraft.model}
+                            onChange={(event) => patchProfile({ model: event.target.value })}
+                            placeholder="llama3.2"
+                            spellCheck={false}
+                          />
+                        </label>
+                        <button className="btn btn-sm" onClick={() => void fetchModels()} disabled={modelBusy}>
+                          {modelBusy ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
+                          {modelBusy ? 'Asking…' : 'Fetch models'}
+                        </button>
+                        {models.length ? (
+                          <select
+                            value={models.includes(profileDraft.model) ? profileDraft.model : ''}
+                            onChange={(event) => patchProfile({ model: event.target.value })}
+                            aria-label="Detected models"
+                          >
+                            <option value="">{models.length} detected…</option>
+                            {models.map((model) => (
+                              <option key={model} value={model}>
+                                {model}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </div>
+                      {modelError ? <div className="ai-inline-error">{modelError}</div> : null}
+
+                      <Slider
+                        label="Temperature"
+                        value={profileDraft.temperature}
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        description="Lower is more deterministic. 0.1–0.3 works best for device troubleshooting."
+                        onChange={(value) => patchProfile({ temperature: value })}
+                      />
+
+                      {profileDraft.authStyle !== 'none' ? (
+                        <div className="ai-key-block">
+                          <div className="ai-key-head">
+                            <span>
+                              <KeyRound size={13} /> API key
+                              {activeProfile && aiKeyIds.includes(activeProfile.id) ? (
+                                <em className="ai-key-saved">
+                                  <Check size={11} /> saved
+                                </em>
+                              ) : (
+                                <em className="ai-key-missing">not set</em>
+                              )}
+                            </span>
+                            {activeProfile && aiKeyIds.includes(activeProfile.id) ? (
+                              <button className="btn btn-ghost btn-xs" onClick={() => void removeKey()}>
+                                <Trash2 size={11} /> Remove key
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="ai-key-row">
+                            <input
+                              type={keyVisible ? 'text' : 'password'}
+                              value={keyDraft}
+                              onChange={(event) => setKeyDraft(event.target.value)}
+                              placeholder={
+                                activeProfile && aiKeyIds.includes(activeProfile.id)
+                                  ? 'Replace saved key…'
+                                  : 'Paste the API key'
+                              }
+                              spellCheck={false}
+                              autoComplete="off"
+                            />
+                            <button
+                              className="icon-btn tiny"
+                              onClick={() => setKeyVisible((visible) => !visible)}
+                              title={keyVisible ? 'Hide key' : 'Show key'}
+                            >
+                              {keyVisible ? <X size={13} /> : <KeyRound size={13} />}
+                            </button>
+                            <button className="btn btn-sm" onClick={() => void saveKey()} disabled={!keyDraft.trim()}>
+                              Save key
+                            </button>
+                          </div>
+                          <span className="setting-description">
+                            Encrypted with Electron safeStorage (the OS keychain). TSTerm never displays a saved
+                            key again. If the keychain is unavailable it is kept in memory for this run only.
+                          </span>
+                        </div>
+                      ) : null}
+
+                      <div className="ai-profile-actions">
+                        <button className="btn btn-sm btn-primary" onClick={saveProfile} disabled={!profileIsDirty}>
+                          <Check size={13} /> Save provider
+                        </button>
+                        {profileIsDirty ? <span className="ai-unsaved">Unsaved changes</span> : null}
+                        <span className={cx('ai-local-badge', profileDraft.local && 'local')}>
+                          {profileDraft.local ? 'Local endpoint' : 'Remote endpoint'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="settings-note-card">
+                    <Database size={15} />
+                    <div>
+                      <strong>What leaves this computer</strong>
+                      <p>
+                        Only the chat messages you send and the context you enable, sent directly to the
+                        provider you configured. Nothing goes to TSTerm or any analytics service. Local
+                        endpoints keep everything on this machine.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="ai-off-note">
+                  <Bot size={18} />
+                  <p>
+                    Enable the assistant above to configure Ollama, LM Studio, or your own API provider.
+                    TSTerm stays fully usable without it.
+                  </p>
+                </div>
+              )}
             </div>
           ) : null}
 

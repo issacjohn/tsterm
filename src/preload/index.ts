@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type {
+  AiChatRequest,
+  AiModelsRequest,
   AppSettings,
   Bootstrap,
   ChooseFileOptions,
@@ -107,6 +109,14 @@ const api: TstermApi = {
   },
   updates: {
     check: (force?: boolean) => ipcRenderer.invoke('updates:check', force)
+  },
+  ai: {
+    chat: (request: AiChatRequest) => ipcRenderer.invoke('ai:chat', request),
+    listModels: (request: AiModelsRequest) => ipcRenderer.invoke('ai:list-models', request),
+    saveKey: (profileId: string, key: string) => ipcRenderer.invoke('ai:save-key', profileId, key),
+    deleteKey: (profileId: string) => ipcRenderer.invoke('ai:delete-key', profileId),
+    keyIds: () => ipcRenderer.invoke('ai:key-ids'),
+    cancel: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId)
   }
 }
 
