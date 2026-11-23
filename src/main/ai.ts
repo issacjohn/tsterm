@@ -48,7 +48,7 @@ function normalizeOllamaModel(name: string): string {
   return name.trim().replace(/:latest$/i, '').toLowerCase()
 }
 
-function ollamaBase(profile: AiProfile): string {
+export function ollamaBase(profile: AiProfile): string {
   const raw = (profile.baseUrl ?? '').trim()
   if (!isLoopbackUrl(raw)) {
     throw new Error(
@@ -65,7 +65,7 @@ function ollamaBase(profile: AiProfile): string {
   return `${parsed.protocol}//${parsed.host}${pathname}`
 }
 
-function isOllamaProfile(profile: AiProfile): boolean {
+export function isOllamaProfile(profile: AiProfile): boolean {
   if (!isLoopbackUrl(profile.baseUrl)) return false
   try {
     const url = new URL(profile.baseUrl)
@@ -79,7 +79,7 @@ function isOllamaProfile(profile: AiProfile): boolean {
 function validateModelName(value: string): string {
   const model = value.trim()
   if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(model)) {
-    throw new Error('Choose a valid Ollama model name, for example llama3.2 or qwen2.5:7b.')
+    throw new Error('Choose a valid Ollama model name, for example qwen3:8b or llama3.2.')
   }
   return model
 }

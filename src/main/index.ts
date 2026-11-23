@@ -12,6 +12,7 @@ import { QuitCoordinator } from './quit'
 import { UpdateService } from './updates'
 import { AiService } from './ai'
 import { ReferenceService } from './references'
+import { CommandService } from './commands'
 import { registerIpc, sendMenuCommand } from './ipc'
 
 app.setName('TSTerm')
@@ -31,6 +32,7 @@ let quit: QuitCoordinator
 let updates: UpdateService
 let ai: AiService
 let references: ReferenceService
+let commands: CommandService
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -42,6 +44,11 @@ function catalogDirectory(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'catalog')
     : path.join(app.getAppPath(), 'resources', 'catalog')
+}
+
+function commandsDirectory(): string {
+  if (process.env.TSTERM_COMMANDS_DIR) return path.resolve(process.env.TSTERM_COMMANDS_DIR)
+  return path.join(app.getAppPath(), 'resources', 'commands')
 }
 
 function send(channel: string, payload: unknown): void {
@@ -76,6 +83,7 @@ function buildMenu(): void {
         command('SFTP Browser', 'sftp', 'CmdOrCtrl+Shift+S'),
         command('Troubleshoot Panel', 'troubleshoot'),
         command('AI Assistant', 'ai-assistant'),
+        command('ASA Command Reference', 'commands', 'CmdOrCtrl+Shift+J'),
         { type: 'separator' },
         command('Command Palette', 'command-palette', 'CmdOrCtrl+Shift+P'),
         command('Keyboard Shortcuts', 'shortcuts', 'F1')
@@ -184,6 +192,7 @@ async function boot(): Promise<void> {
   updates = new UpdateService(store, app.getVersion())
   ai = new AiService(store)
   references = new ReferenceService(store.paths.appData)
+  commands = new CommandService(store, commandsDirectory())
   quit = new QuitCoordinator(debug, sessions)
   registerIpc({
     store,
@@ -196,6 +205,7 @@ async function boot(): Promise<void> {
     updates,
     ai,
     references,
+    commands,
     getWindow: () => mainWindow
   })
   buildMenu()

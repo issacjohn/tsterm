@@ -245,9 +245,9 @@ function ThemeTile({ theme, active, onClick }: { theme: TerminalTheme; active: b
 }
 
 const MODEL_PRESETS: Array<{ id: string; name: string; note: string }> = [
-  { id: 'qwen2.5:7b', name: 'Qwen2.5 7B', note: 'Recommended' },
-  { id: 'llama3.1:8b', name: 'Llama 3.1 8B', note: 'Strong general' },
-  { id: 'qwen2.5:3b', name: 'Qwen2.5 3B', note: 'Lighter' },
+  { id: 'qwen3:8b', name: 'Qwen3 8B', note: 'Recommended' },
+  { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', note: 'Reasoning / slower' },
+  { id: 'qwen2.5:7b', name: 'Qwen2.5 7B', note: 'Previous default' },
   { id: 'llama3.2', name: 'Llama 3.2 3B', note: 'Fastest / weakest' }
 ]
 
@@ -1223,7 +1223,7 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                           <input
                             value={profileDraft.model}
                             onChange={(event) => patchProfile({ model: event.target.value })}
-                            placeholder="llama3.2"
+                            placeholder="qwen3:8b"
                             spellCheck={false}
                           />
                         </label>
@@ -1274,7 +1274,7 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                           <div className="ai-model-quality">
                             <ShieldCheck size={12} />
                             <span>
-                              This is a small model. If answers feel generic, switch to Qwen2.5 7B or
+                              This is a small model. If answers feel generic, switch to Qwen3 8B or
                               Llama 3.1 8B.
                             </span>
                           </div>

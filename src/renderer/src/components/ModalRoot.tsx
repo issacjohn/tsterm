@@ -15,6 +15,7 @@ import { KnownHostsModal } from './modals/KnownHostsModal'
 import { CommandPalette } from './modals/CommandPalette'
 import { UpdateModal } from './modals/UpdateModal'
 import { RunbookModal } from './RunbookModal'
+import { CommandBrowserModal } from './CommandBrowserModal'
 
 export function ModalRoot(): React.JSX.Element | null {
   const modal = useAppStore((state) => state.modal)
@@ -54,6 +55,8 @@ export function ModalRoot(): React.JSX.Element | null {
       return <UpdateModal info={modal.info} manual={modal.manual} />
     case 'runbook':
       return <RunbookModal />
+    case 'command-browser':
+      return <CommandBrowserModal />
     default:
       return null
   }

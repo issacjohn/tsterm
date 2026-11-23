@@ -137,6 +137,14 @@ const api: TstermApi = {
     remove: (id: string) => ipcRenderer.invoke('references:remove', id),
     search: (request: AiReferenceSearchRequest) => ipcRenderer.invoke('references:search', request),
     openFolder: () => ipcRenderer.invoke('references:open-folder')
+  },
+  commands: {
+    status: () => ipcRenderer.invoke('commands:status'),
+    reload: () => ipcRenderer.invoke('commands:reload'),
+    search: (request) => ipcRenderer.invoke('commands:search', request),
+    buildIndex: (profileId?: string) => ipcRenderer.invoke('commands:index-vectors', profileId),
+    route: (request) => ipcRenderer.invoke('commands:route', request),
+    onIndexProgress: (callback) => on('commands:index-progress', callback)
   }
 }
 

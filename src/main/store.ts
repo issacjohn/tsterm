@@ -152,6 +152,10 @@ function sanitizeSettings(input: unknown): AppSettings {
   merged.localShellArgs = asStringArray(merged.localShellArgs, [])
   merged.skippedUpdateVersion = asString(merged.skippedUpdateVersion, '') || undefined
   merged.aiProfiles = sanitizeAiProfiles(raw.aiProfiles)
+  // The built-in Ollama profile used to default to llama3.2. Move that specific
+  // default forward without touching a custom profile or a deliberate choice.
+  const builtInOllama = merged.aiProfiles.find((profile) => profile.id === 'local-ollama')
+  if (builtInOllama?.model === 'llama3.2') builtInOllama.model = 'qwen3:8b'
   merged.aiActiveProfileId = asString(merged.aiActiveProfileId, '') || undefined
   if (
     merged.aiActiveProfileId &&

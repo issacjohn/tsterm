@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  BookOpen,
   Bot,
   Braces,
   Coffee,
@@ -110,6 +111,15 @@ export function CommandPalette(): React.JSX.Element {
           saveSettings({ showTroubleshootPanel: true })
           state.setTroubleshootTab('assistant')
         }
+      },
+      {
+        id: 'commands',
+        label: 'ASA command reference',
+        category: 'Library',
+        keywords: 'cisco asa command catalog search bm25 vector hybrid router',
+        icon: BookOpen,
+        shortcut: 'Ctrl Shift J',
+        run: () => state.setModal({ kind: 'command-browser' })
       },
       {
         id: 'snippets',

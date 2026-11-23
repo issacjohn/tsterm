@@ -32,6 +32,7 @@ export type MenuCommand =
   | 'close-tab'
   | 'reconnect'
   | 'command-palette'
+  | 'commands'
   | 'shortcuts'
 
 /* ------------------------------------------------------------------ hosts */
@@ -389,6 +390,104 @@ export interface AiChatContext {
   currentCommand?: string
   runbookHints?: string[]
   referenceHints?: string[]
+}
+
+export type CommandRisk = 'read_only' | 'diagnostic' | 'mutating' | 'destructive'
+
+export interface CommandParameter {
+  name: string
+  required: boolean
+  regex?: string
+  description?: string
+  default?: string
+  placeholder?: string
+}
+
+export interface AsaCommandRecord {
+  id: string
+  vendor: 'cisco-asa'
+  commandTemplate: string
+  optionalTemplate?: string
+  description: string
+  category: string
+  mode: string
+  risk: CommandRisk
+  keywords: string[]
+  parameters: CommandParameter[]
+  examples: string[]
+  cleanup: string[]
+  source: 'asa-help' | 'runbook' | 'cisco-docs' | 'device-help'
+  version: string
+}
+
+export interface CommandSearchRequest {
+  query: string
+  limit?: number
+  risk?: CommandRisk
+  mode?: string
+  useVector?: boolean
+}
+
+export interface CommandSearchMatch {
+  record: AsaCommandRecord
+  score: number
+  bm25Score: number
+  vectorScore?: number
+  via: 'bm25' | 'vector' | 'hybrid'
+}
+
+export interface CommandSearchResult {
+  matches: CommandSearchMatch[]
+  vectorReady: boolean
+  vectorModel: string
+  vectorError?: string
+  note?: string
+  total: number
+}
+
+export interface CommandStatusResult {
+  total: number
+  vectorReady: boolean
+  vectorModel: string
+  vectorCount: number
+  indexing: boolean
+  vectorError?: string
+}
+
+export interface CommandIndexProgress {
+  phase: 'embedding' | 'saving' | 'done' | 'error'
+  done: number
+  total: number
+  error?: string
+}
+
+export interface CommandRouteCandidate {
+  id: string
+  commandTemplate: string
+  description: string
+  risk: CommandRisk
+  mode: string
+  parameters: CommandParameter[]
+}
+
+export interface CommandRouteRequest {
+  query: string
+  terminalTail?: string
+  profileId?: string
+}
+
+export interface CommandRouteResult {
+  ok: boolean
+  selected?: AsaCommandRecord
+  params: Record<string, string>
+  missing: string[]
+  confidence?: 'high' | 'medium' | 'low'
+  reasoning?: string
+  rendered?: string
+  validationError?: string
+  error?: string
+  candidates: AsaCommandRecord[]
+  vectorReady?: boolean
 }
 
 export interface AiReferenceDoc {
@@ -769,5 +868,13 @@ export interface TstermApi {
     remove(id: string): Promise<AiReferenceDoc[]>
     search(request: AiReferenceSearchRequest): Promise<AiReferenceSearchResult>
     openFolder(): Promise<void>
+  }
+  commands: {
+    status(): Promise<CommandStatusResult>
+    reload(): Promise<CommandStatusResult>
+    search(request: CommandSearchRequest): Promise<CommandSearchResult>
+    buildIndex(profileId?: string): Promise<CommandStatusResult>
+    route(request: CommandRouteRequest): Promise<CommandRouteResult>
+    onIndexProgress(callback: (progress: CommandIndexProgress) => void): Unsubscribe
   }
 }

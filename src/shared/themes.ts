@@ -264,7 +264,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       name: 'Ollama (local)',
       kind: 'openai-compatible',
       baseUrl: 'http://127.0.0.1:11434/v1',
-      model: 'llama3.2',
+      model: 'qwen3:8b',
       authStyle: 'none',
       maxTokens: 1024,
       temperature: 0.2,

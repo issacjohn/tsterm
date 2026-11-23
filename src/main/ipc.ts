@@ -6,6 +6,8 @@ import type {
   Bootstrap,
   ChooseFileOptions,
   ChooseSaveOptions,
+  CommandRouteRequest,
+  CommandSearchRequest,
   ConnectLocalOptions,
   ConnectSshOptions,
   HostInput,
@@ -25,6 +27,7 @@ import type { QuitCoordinator } from './quit'
 import type { UpdateService } from './updates'
 import type { AiService } from './ai'
 import type { ReferenceService } from './references'
+import type { CommandService } from './commands'
 import { installOllamaRuntime } from './ollama-runtime'
 
 export interface IpcServices {
@@ -38,6 +41,7 @@ export interface IpcServices {
   updates: UpdateService
   ai: AiService
   references: ReferenceService
+  commands: CommandService
   getWindow: () => BrowserWindow | null
 }
 
@@ -62,7 +66,7 @@ function asPort(value: unknown, fallback: number): number {
 }
 
 export function registerIpc(services: IpcServices): void {
-  const { store, catalog, sessions, debug, sftp, forwards, quit, updates, ai, references } =
+  const { store, catalog, sessions, debug, sftp, forwards, quit, updates, ai, references, commands } =
     services
 
   const openDialog = (
@@ -92,7 +96,7 @@ export function registerIpc(services: IpcServices): void {
       debugSessions: debug.list(),
       aiKeyIds: store.getAiKeyIds(),
       referenceDocs: references.list(),
-      warnings: [...store.warnings, ...references.getWarnings()]
+      warnings: [...store.warnings, ...references.getWarnings(), ...commands.getWarnings()]
     }
   })
 
@@ -400,6 +404,47 @@ export function registerIpc(services: IpcServices): void {
   )
   ipcMain.handle('references:search', (_event, request) => references.search(request))
   ipcMain.handle('references:open-folder', () => shell.openPath(references.getFolder()))
+
+  ipcMain.handle('commands:status', () => commands.status())
+  ipcMain.handle('commands:reload', () => commands.reload())
+  ipcMain.handle('commands:search', (_event, request?: CommandSearchRequest) => {
+    const input = request && typeof request === 'object' ? request : { query: '' }
+    const risk =
+      input.risk === 'read_only' ||
+      input.risk === 'diagnostic' ||
+      input.risk === 'mutating' ||
+      input.risk === 'destructive'
+        ? input.risk
+        : undefined
+    return commands.search({
+      query: typeof input.query === 'string' ? input.query.slice(0, 1000) : '',
+      limit: Number(input.limit) || 8,
+      risk,
+      mode: typeof input.mode === 'string' ? input.mode.slice(0, 80) : undefined,
+      useVector: input.useVector !== false
+    })
+  })
+  ipcMain.handle('commands:index-vectors', async (event, profileId?: string) => {
+    try {
+      return await commands.buildVectorIndex(optionalString(profileId), (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send('commands:index-progress', progress)
+      })
+    } catch (error) {
+      return {
+        ...commands.status(),
+        vectorError: (error as Error).message
+      }
+    }
+  })
+  ipcMain.handle('commands:route', (_event, request?: CommandRouteRequest) => {
+    const input = request && typeof request === 'object' ? request : ({} as CommandRouteRequest)
+    return commands.route({
+      query: requiredString(input.query, 'Question'),
+      terminalTail:
+        typeof input.terminalTail === 'string' ? input.terminalTail.slice(0, 8000) : undefined,
+      profileId: optionalString(input.profileId)
+    })
+  })
 
   ipcMain.handle('app:quit', (_event, action: QuitAction) => {
     quit.action(action)

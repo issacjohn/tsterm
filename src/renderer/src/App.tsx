@@ -319,6 +319,9 @@ function handleMenuCommand(command: MenuCommand): void {
         state.setTroubleshootTab('assistant')
       }
       break
+    case 'commands':
+      state.setModal({ kind: 'command-browser' })
+      break
     case 'sftp': {
       const pane = activePane(state)
       if (pane?.sessionId && pane.status === 'connected' && pane.kind === 'ssh') {

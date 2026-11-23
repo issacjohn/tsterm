@@ -13,6 +13,7 @@ import {
   EyeOff,
   KeyRound,
   Loader2,
+  Search,
   Send,
   ShieldCheck,
   Sparkles,
@@ -436,6 +437,19 @@ export function AiChatPanel(): React.JSX.Element {
           </div>
         </div>
         <div className="ai-topline-actions">
+          <button
+            className="ai-context-chip"
+            onClick={() =>
+              setModal({
+                kind: 'command-browser',
+                query: draft.trim() || undefined,
+                sessionId
+              })
+            }
+            title="Search ASA commands or let the router choose one"
+          >
+            <Search size={11} /> Commands
+          </button>
           {referenceCount > 0 ? (
             <button
               className="ai-reference-chip"

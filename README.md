@@ -70,10 +70,10 @@ Ollama server and automatically downloads the selected model through Ollama's pu
 and a cancel button. The download continues if you close Settings, and can be turned off with
 **Download local models automatically**.
 
-Responses stream token by token, so answers appear while the model is still writing. **Qwen2.5 7B** is the
-recommended local model for network CLI work; 1B–3B models are often generic, and TSTerm warns when one is
-selected. Device type and matching runbooks are always sent to the model; live terminal lines remain
-opt-in.
+Responses stream token by token, so answers appear while the model is still writing. **Qwen3 8B** is the
+recommended local model for network CLI work and for the command router; 1B–3B models are often generic,
+and TSTerm warns when one is selected. Device type and matching runbooks are always sent to the model;
+live terminal lines remain opt-in.
 
 The AI is **scoped to the active device pack**. An ASA session receives ASA runbooks only; other packs are
 excluded from the prompt. This build ships the ASA pack only, so a local terminal has no vendor runbooks
@@ -85,6 +85,28 @@ back and the previous conversation and draft are exactly where you left them. Re
 are on another tab are delivered to the correct thread. Closing a tab clears that terminal's thread.
 Ollama reuses the loaded model across threads, so separate conversations do not reload or duplicate the
 model in VRAM.
+
+### ASA command reference and deterministic router
+
+![ASA command reference and router](screenshots/commands-04-ai-route.png)
+
+**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **503 ASA command
+records**: 75 top-level commands, 407 runbook steps, and 21 complete examples. Search runs locally with
+BM25 and, after a
+one-time Ollama embedding pass, hybrid vector retrieval merged with reciprocal rank fusion.
+
+The **Let AI choose** action is different from free chat. The model receives only the top candidate
+records and returns JSON with a candidate ID and extracted parameter values. TSTerm rejects any ID that
+was not retrieved, drops any value that is not present in your question or terminal output, validates
+each parameter, and renders the command from the curated template. The model never writes the command
+string.
+
+Every record is classified as read-only, diagnostic, mutating, or destructive. Diagnostic records show
+their cleanup, and destructive records require typing `CONFIRM` before **Fill** is enabled. Fill writes
+one line and never presses Enter.
+
+The full design, schema, retrieval rules, and limitations are in
+[docs/COMMANDS.md](docs/COMMANDS.md).
 
 ### Reference library
 
@@ -327,7 +349,13 @@ npm run test:ai-reference
 # Verifies separate per-terminal conversations, drafts, and background completion
 npm run test:ai-threads
 
-# Requires Ollama plus qwen2.5:7b; sends a real streaming prompt through TSTerm
+# Opens the ASA command browser, searches, filters, and checks Fill-only behavior
+npm run test:commands-ui
+
+# Requires Ollama plus qwen3:8b and nomic-embed-text; builds the vector index and routes real questions
+$env:TSTERM_OLLAMA_TEST = '1'; npm test -- tests/commands-ollama.test.ts
+
+# Requires Ollama plus qwen3:8b; sends a real streaming prompt through TSTerm
 npm run test:ai-ollama
 
 # Starts a real RADIUS debug, quits through the guard, and checks the cleanup with show debug
