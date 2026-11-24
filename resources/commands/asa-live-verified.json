@@ -1,0 +1,397 @@
+{
+  "version": 1,
+  "vendor": "cisco-asa",
+  "generatedAt": "2026-11-24T00:00:00.000Z",
+  "source": {
+    "kind": "live-verified",
+    "device": "ciscoasa",
+    "softwareVersion": "Cisco Adaptive Security Appliance Software Version 9.24(10)",
+    "verifiedAt": "2026-11-24",
+    "notes": "Read-only ASA help probes confirmed these capture forms on the live device."
+  },
+  "commands": [
+    {
+      "id": "asa.live.capture-name",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name}",
+      "description": "Start a packet capture with the supplied capture name.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "packet", "pcap", "diagnostic", "start"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name>"
+    },
+    {
+      "id": "asa.live.capture-interface",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} interface {iface}",
+      "description": "Capture packets on one interface.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "packet", "interface", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "iface",
+          "required": true,
+          "regex": "^[A-Za-z][A-Za-z0-9/_.:-]*$",
+          "description": "Interface nameif",
+          "placeholder": "inside"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> interface <iface>"
+    },
+    {
+      "id": "asa.live.capture-any-any",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} interface {iface} match ip any any",
+      "description": "Capture all IP traffic on one interface.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "packet", "interface", "any", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "iface",
+          "required": true,
+          "regex": "^[A-Za-z][A-Za-z0-9/_.:-]*$",
+          "description": "Interface nameif",
+          "placeholder": "outside"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> interface <iface> match ip any any"
+    },
+    {
+      "id": "asa.live.capture-host",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} interface {iface} match ip host {src} host {dst}",
+      "description": "Capture host-to-host IP traffic on one interface.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "packet", "host", "interface", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "iface",
+          "required": true,
+          "regex": "^[A-Za-z][A-Za-z0-9/_.:-]*$",
+          "description": "Interface nameif",
+          "placeholder": "outside"
+        },
+        {
+          "name": "src",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Source IP",
+          "placeholder": "10.1.1.1"
+        },
+        {
+          "name": "dst",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Destination IP",
+          "placeholder": "8.8.8.8"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> interface <iface> match ip host <src> host <dst>"
+    },
+    {
+      "id": "asa.live.capture-subnet",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} interface {iface} match ip {srcnet} {srcmask} {dstnet} {dstmask}",
+      "description": "Capture subnet-to-subnet IP traffic on one interface.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "packet", "subnet", "interface", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "iface",
+          "required": true,
+          "regex": "^[A-Za-z][A-Za-z0-9/_.:-]*$",
+          "description": "Interface nameif",
+          "placeholder": "outside"
+        },
+        {
+          "name": "srcnet",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Source subnet",
+          "placeholder": "10.1.1.0"
+        },
+        {
+          "name": "srcmask",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Source mask",
+          "placeholder": "255.255.255.0"
+        },
+        {
+          "name": "dstnet",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Destination subnet",
+          "placeholder": "10.2.2.0"
+        },
+        {
+          "name": "dstmask",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Destination mask",
+          "placeholder": "255.255.255.0"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> interface <iface> match ip <srcnet> <srcmask> <dstnet> <dstmask>"
+    },
+    {
+      "id": "asa.live.capture-port",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} interface {iface} match {proto} host {src} host {dst} eq {port}",
+      "description": "Capture protocol/port traffic on one interface.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "packet", "port", "protocol", "interface", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "iface",
+          "required": true,
+          "regex": "^[A-Za-z][A-Za-z0-9/_.:-]*$",
+          "description": "Interface nameif",
+          "placeholder": "outside"
+        },
+        {
+          "name": "proto",
+          "required": true,
+          "regex": "^(?:tcp|udp|icmp|icmp6|gre|esp|ah|ospf|pim|igmp|eigrp|sctp|pptp|ipsec|ipinip|ip)$",
+          "description": "Protocol",
+          "placeholder": "tcp"
+        },
+        {
+          "name": "src",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Source IP",
+          "placeholder": "10.1.1.1"
+        },
+        {
+          "name": "dst",
+          "required": true,
+          "regex": "^(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)$",
+          "description": "Destination IP",
+          "placeholder": "8.8.8.8"
+        },
+        {
+          "name": "port",
+          "required": true,
+          "regex": "^(?:[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])$",
+          "description": "Destination port",
+          "placeholder": "443"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> interface <iface> match <proto> host <src> host <dst> eq <port>"
+    },
+    {
+      "id": "asa.live.capture-buffer",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} buffer {size}",
+      "description": "Set the capture buffer size in bytes.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "buffer", "size", "packet", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "size",
+          "required": true,
+          "regex": "^\\d{4,8}$",
+          "description": "Buffer size in bytes (1534-33554432)",
+          "placeholder": "33554432"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> buffer <size>"
+    },
+    {
+      "id": "asa.live.capture-acl",
+      "vendor": "cisco-asa",
+      "commandTemplate": "capture {name} access-list {acl}",
+      "description": "Capture packets that match an access list.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["capture", "access-list", "acl", "packet", "pcap", "diagnostic"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        },
+        {
+          "name": "acl",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Access-list name",
+          "placeholder": "TSTCAP_ACL"
+        }
+      ],
+      "examples": [],
+      "cleanup": ["no capture {name}"],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "capture <name> access-list <acl>"
+    },
+    {
+      "id": "asa.live.show-capture",
+      "vendor": "cisco-asa",
+      "commandTemplate": "show capture {name}",
+      "description": "Display packets in a capture.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "read_only",
+      "keywords": ["show", "capture", "packet", "pcap", "display"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        }
+      ],
+      "examples": [],
+      "cleanup": [],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "show capture <name>"
+    },
+    {
+      "id": "asa.live.no-capture",
+      "vendor": "cisco-asa",
+      "commandTemplate": "no capture {name}",
+      "description": "Remove a packet capture.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "diagnostic",
+      "keywords": ["no", "capture", "remove", "cleanup", "pcap"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        }
+      ],
+      "examples": [],
+      "cleanup": [],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "no capture <name>"
+    },
+    {
+      "id": "asa.live.clear-capture",
+      "vendor": "cisco-asa",
+      "commandTemplate": "clear capture {name}",
+      "description": "Clear packets from a capture without removing it.",
+      "category": "Packet Capture, Tracing & Troubleshooting",
+      "mode": "privileged EXEC",
+      "risk": "mutating",
+      "keywords": ["clear", "capture", "packets", "pcap"],
+      "parameters": [
+        {
+          "name": "name",
+          "required": true,
+          "regex": "^[A-Za-z0-9_.-]{1,100}$",
+          "description": "Capture name",
+          "placeholder": "TSTCAP"
+        }
+      ],
+      "examples": [],
+      "cleanup": [],
+      "source": "device-help",
+      "version": "9.24(10)",
+      "syntax": "clear capture <name>"
+    }
+  ]
+}

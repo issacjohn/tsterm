@@ -16,6 +16,140 @@ export function extractInlineCommands(text: string): string[] {
     .filter((command) => looksLikeCommand(command))
 }
 
+const PROSE_COMMAND_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'by',
+  'can',
+  'could',
+  'for',
+  'from',
+  'has',
+  'have',
+  'how',
+  'i',
+  'if',
+  'in',
+  'is',
+  'it',
+  'me',
+  'my',
+  'of',
+  'on',
+  'or',
+  'our',
+  'output',
+  'please',
+  'result',
+  'results',
+  'should',
+  'that',
+  'the',
+  'then',
+  'this',
+  'to',
+  'was',
+  'we',
+  'were',
+  'what',
+  'when',
+  'where',
+  'which',
+  'who',
+  'why',
+  'will',
+  'with',
+  'would',
+  'you',
+  'your'
+])
+
+/**
+ * A conservative detector for a command that was written as a standalone
+ * prose line instead of a fenced block. Sentences such as "Show me the
+ * output" are rejected by the prose-word check.
+ */
+export function looksLikeBareCommand(value: string): boolean {
+  const line = stripPromptPrefix(value)
+    .replace(/^\s*(?:\d+[.)]|[-*])\s*/, '')
+    .trim()
+  if (!line || line.length > 160) return false
+  if (/[.?!]$/.test(line)) return false
+  if (!looksLikeCommand(line)) return false
+  const words = line.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length > 12) return false
+  if (words.some((word) => PROSE_COMMAND_WORDS.has(word))) return false
+  return true
+}
+
+export function redactUnverifiedCommands(
+  content: string,
+  isAllowed: (command: string) => boolean
+): { content: string; removed: string[] } {
+  const removed: string[] = []
+  const output: string[] = []
+
+  for (const segment of parseAiContent(content)) {
+    if (segment.kind === 'code') {
+      if (!segment.block.commands.length) {
+        output.push(`\`\`\`${segment.block.language}\n${segment.block.code}\n\`\`\``)
+        continue
+      }
+      const kept: string[] = []
+      for (const line of segment.block.code.split(/\r?\n/)) {
+        const command = stripPromptPrefix(line)
+        if (!command || command.startsWith('!') || command.startsWith('#')) {
+          kept.push(line)
+          continue
+        }
+        if (isAllowed(command)) {
+          kept.push(line)
+        } else {
+          removed.push(command)
+        }
+      }
+      const body = kept.join('\n').trim()
+      output.push(
+        body
+          ? `\`\`\`${segment.block.language}\n${body}\n\`\`\``
+          : '[unverified commands hidden]'
+      )
+      continue
+    }
+
+    const parts = segment.content.split(/(`[^`\n]+`)/g)
+    const text = parts
+      .map((part) => {
+        if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+          const code = part.slice(1, -1).trim()
+          if (looksLikeCommand(code) && !isAllowed(code)) {
+            removed.push(code)
+            return '[unverified command hidden]'
+          }
+          return part
+        }
+        return part
+      })
+      .join('')
+
+    const lines = text.split('\n').map((line) => {
+      if (looksLikeBareCommand(line) && !isAllowed(stripPromptPrefix(line))) {
+        removed.push(stripPromptPrefix(line))
+        return '[unverified command hidden]'
+      }
+      return line
+    })
+    output.push(lines.join('\n').trim())
+  }
+
+  return { content: output.filter(Boolean).join('\n\n'), removed }
+}
+
 const COMMAND_REQUEST_PATTERNS = [
   /^(?:what|which|find|give|show|list|suggest|recommend)\b.{0,80}\b(?:commands?|cli|syntax)\b/i,
   /^(?:i\s+)?(?:need|want|looking for)\b.{0,60}\b(?:commands?|cli|syntax)\b/i,

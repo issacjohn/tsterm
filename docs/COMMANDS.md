@@ -5,11 +5,12 @@ selects a command record and extracts parameters. The model never writes the fin
 
 ## What is in the catalog
 
-TSTerm loads three local packs:
+TSTerm loads four local packs:
 
 | File | Records | Purpose |
 | --- | --- | --- |
 | `resources/commands/asa-commands.json` | 503 | Curated, parameterized, fillable commands |
+| `resources/commands/asa-live-verified.json` | 11 | Live-verified capture commands promoted to fillable |
 | `resources/commands/asa-device-help.json` | 24,475 | Normalized ASA 9.24(10) device-help reference |
 | `resources/commands/asa-reference.json` | 2,510 | Cisco documentation reference entries |
 
@@ -37,8 +38,12 @@ an ASA running 9.24(10). The importer normalizes enum choices, masks and types p
 placeholders, infers risk, and writes a searchable reference-only pack. Device-help entries are version-
 tagged, mode-aware, and used by grounding to recognize commands that exist on the device even when they are
 not in the curated fillable catalog. They are **not fillable** because the crawler does not produce a
-reviewed parameter schema for every entry. The crawl is a snapshot, not a proof of completeness: optional
-branches can be missed, so a missing device-help entry means “not captured,” not necessarily “not supported.”
+reviewed parameter schema for every entry.
+
+`resources/commands/asa-live-verified.json` is a small curated supplement for commands confirmed directly on
+the live device with read-only help probes. It currently covers the capture forms that the original crawl
+missed: `capture <name>`, `capture <name> interface <iface>`, any/any, host, subnet, protocol/port,
+access-list, buffer, `show capture`, `no capture`, and `clear capture`.
 
 The next data phase is to parameterize the high-value reference commands, complete the missing optional
 branches in the device crawl, and add syslog-ID mappings.
@@ -91,7 +96,7 @@ The vector layer is optional and local:
 
 - model: `nomic-embed-text` through Ollama;
 - endpoint: `/api/embed`, with a fallback to `/api/embeddings` for older Ollama builds;
-- coverage: the **503 fillable records only**; device-help and Cisco documentation entries stay BM25-only;
+- coverage: the **514 fillable records only**; device-help and Cisco documentation entries stay BM25-only;
 - text embedded: command template, description, keywords, examples, and cleanup;
 - storage: `<userData>/command-index/nomic-embed-text.json`, keyed by record id and content hash;
 - build: **Build vector index** in the command browser, or `commands.buildIndex()` over IPC;
@@ -120,17 +125,24 @@ Free chat uses the same local catalog in addition to the runbook hints:
 
 ### Assistant command grounding
 
-Every command that appears in an assistant reply — fenced or inline — is checked against the local catalog
-before it can be filled. The renderer calls `commands.verify()` and shows one of three states:
+Every command that appears in an assistant reply — fenced, inline, or a standalone command line — is checked
+against the local catalog. The renderer calls `commands.verify()` and uses these states:
 
-| State | Meaning | Fill |
+| State | Meaning | Strict mode |
 | --- | --- | --- |
-| `verified` | Exact match for a curated template or example | Enabled |
-| `documented` | Device-help or Cisco-documentation reference only | Disabled |
-| `unknown` | Not in the local catalog | Disabled |
+| `verified` | Exact match for a curated template or example | Shown, Fill enabled |
+| `documented` + `device-help` | Present in the ASA 9.24(10) device help | Shown, reference only, Fill disabled |
+| `documented` + `cisco-docs` | Cisco documentation reference only | Hidden |
+| `unknown` | Not in the local catalog | Hidden |
 
-Device-help matches say **Device help 9.24(10) — reference only**; Cisco documentation matches say
-**Documented reference, not verified**. Both are non-fillable.
+Each answer gets a summary banner. In strict mode, unknown and Cisco-documentation commands are removed from
+the rendered answer, including standalone command-like lines. The banner reports how many commands were hidden,
+and only the verified lines are available to **Copy** and **Snippet**. The original assistant message is also
+sanitized before it is sent back to the model as conversation history, so the model cannot reinforce its own
+unverified commands.
+
+Device-help matches say **Device help 9.24(10) — reference only**. Non-strict mode keeps the old behavior:
+unknown and documentation-only commands remain visible, clearly marked, and non-fillable.
 
 Each answer gets a summary banner, and each command line gets its own label. While the check is running,
 Fill is disabled and the line reads **Checking the local catalog…**. If the check fails, the command is
@@ -138,8 +150,8 @@ treated as `unknown` and the UI says to verify it on the device.
 
 **Strict command grounding** is on by default (`Settings → AI → Strict command grounding`). In strict mode,
 device-help entries may be used as exact version-specific syntax references, but they stay reference-only.
-Cisco documentation entries are excluded from free-chat command hints, and documentation-only syntax is never
-presented as a runnable command.
+Cisco documentation entries are excluded from free-chat command hints, and any command that is not a curated
+or device-help match is removed from the rendered answer instead of being shown.
 
 Explicit command requests (“what command shows interface errors?”, “command to capture traffic”) are not
 sent to the model. The composer button changes to **Find command** and opens the command browser with the
@@ -155,7 +167,7 @@ When the command reference is opened with the AI assistant enabled, a local Olla
 
 1. checks for `nomic-embed-text`,
 2. pulls it through Ollama if it is missing,
-3. builds the vector index for the 503 fillable records in the background.
+3. builds the vector index for the 514 fillable records in the background.
 
 The command browser can also run the same check manually with **Build vector index**. Turning the setting
 off skips the automatic background setup; the manual build still works when `nomic-embed-text` is already
@@ -225,7 +237,7 @@ provenance checks.
 - AI panel: an explicit command request changes **Ask** to **Find command** and opens the browser directly;
   the free-chat model is not called for command lookup.
 - Command answers mark every command as verified, documented, or unknown; only exact curated matches can be
-  filled.
+  filled. In strict mode, unverified command lines are hidden and counted in the summary.
 - Search by command, keyword, symptom, interface, or exact token.
 - Filter by risk.
 - Select a fillable record, fill parameters, review the preview, then **Fill**, **Copy**, or **Snippet**.
@@ -233,6 +245,8 @@ provenance checks.
   copied but not filled.
 - Device-help entries show the captured ASA 9.24(10) syntax, mode, and category; they can be copied but not
   filled until they are promoted to a curated, parameterized record.
+- The live-verified capture family is curated and fillable, including the any/any, host, subnet, protocol/port,
+  buffer, access-list, `show capture`, `no capture`, and `clear capture` forms.
 - Incomplete top-level records are clearly labeled and cannot be filled until you add the subcommand or
   pick a complete runbook step.
 - **Let AI choose** appears when AI is enabled and a local Ollama model is selected.
@@ -249,6 +263,8 @@ node scripts/import-asa-command-reference.mjs
 # Normalize the read-only ASA 9.24(10) device-help crawl
 node scripts/import-device-command-help.mjs "C:\path\to\asa_commands.json"
 
+# Live-verified capture additions are maintained in resources/commands/asa-live-verified.json
+
 # Fast unit tests (no Ollama)
 npm test
 
@@ -264,7 +280,7 @@ $env:TSTERM_BUILD_VECTORS = '1'
 node scripts/commands-ui-smoke.mjs
 ```
 
-The opt-in test builds the 503-record embedding index, checks semantic retrieval for VPN, RADIUS,
+The opt-in test builds the 514-record embedding index, checks semantic retrieval for VPN, RADIUS,
 certificate, and interface questions, and verifies that Qwen3 8B:
 
 - routes a host-to-host capture without inventing values;
@@ -273,19 +289,20 @@ certificate, and interface questions, and verifies that Qwen3 8B:
 
 ## Known limitations
 
-- The catalog is ASA-only and version-labeled 9.24; other versions and platforms are not modeled yet.
+- The catalog is ASA-only and version-labeled 9.24(10); other versions and platforms are not modeled yet.
 - Top-level commands are incomplete by design. The UI labels them and prefers runbook steps for routing.
 - Literal ASA-help examples are browsable and copyable, but excluded from AI routing so example IPs or
   ports can never be substituted for the user's values.
 - The 2,510 Cisco reference entries are documentation aids, not parameterized recipes. Their syntax is
   normalized from Cisco's HTML tables; verify unusual bracket/pipe formatting against the linked page.
 - The 24,475 device-help entries are a normalized snapshot of one ASA 9.24(10) `?` crawl. Optional branches
-  can be missed (for example, some `capture` interface/match combinations), so treat absence as “not
-  captured,” not “not supported.” They are reference-only until promoted to a curated record.
+  can be missed, so treat absence as “not captured,” not “not supported.” The live-verified capture family
+  covers the common capture forms that the original crawl missed. Device-help entries remain reference-only
+  until promoted to a curated record.
 - Device-help parameter types are inferred from help tokens and descriptions. They are good enough for
   reference and grounding, but not yet a reviewed Fill schema.
-- Assistant grounding trusts the local catalog. If the catalog lacks a valid version-specific command, the
-  command is marked unknown and cannot be filled until the catalog is extended.
+- Assistant grounding trusts the local catalog. In strict mode, a valid command that is missing from the
+  catalog is hidden; the summary reports it. Add it to the live-verified or curated pack to make it available.
 - Grounding checks the rendered text against curated templates and examples. A command with substituted
   values is verified only when it matches a template's structure.
 - Syslog IDs are tokenized and searchable, but the reference import does not yet map IDs to commands.

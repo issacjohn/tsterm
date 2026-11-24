@@ -86,29 +86,29 @@ are on another tab are delivered to the correct thread. Closing a tab clears tha
 Ollama reuses the loaded model across threads, so separate conversations do not reload or duplicate the
 model in VRAM.
 
-Assistant replies are **grounded in the local ASA catalog**. Every fenced and inline command is checked
-before it can be filled: exact curated matches show **Verified in the local ASA catalog**, device-help
-matches show **Device help 9.24(10) — reference only**, Cisco documentation is marked but cannot be filled,
-and anything else is labeled **Not in the local ASA catalog — verify on the device**. The summary above each
-answer reports how many commands were verified. **Strict command grounding** is on by default and can be
-toggled in AI settings. Explicit command requests such as “what command shows interface errors?” switch the
-button from **Ask** to **Find command** and open the command browser with the question as the query instead
-of calling the model.
+Assistant replies are **grounded in the local ASA catalog**. Every fenced, inline, and standalone command line is
+checked. In strict mode, only curated commands and device-help commands present on ASA 9.24(10) are rendered;
+anything else is removed before display and reported as hidden. Exact curated matches show **Verified in the
+local ASA catalog**, device-help matches show **Device help 9.24(10) — reference only**, Cisco documentation is
+hidden, and unknown commands are hidden. Copy and Snippet only use the verified lines. **Strict command
+grounding** is on by default and can be toggled in AI settings. Explicit command requests such as “what command
+shows interface errors?” switch the button from **Ask** to **Find command** and open the command browser with
+the question as the query instead of calling the model.
 
 ### ASA command reference and deterministic router
 
 ![ASA command reference and router](screenshots/commands-04-ai-route.png)
 
-**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **27,488 ASA command
+**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **27,499 ASA command
 records**:
 
-- **503 fillable records**: 75 top-level commands, 407 runbook steps, and 21 complete examples.
+- **514 fillable records**: 503 curated commands plus 11 live-verified capture records.
 - **24,475 device-help records** normalized from a read-only `?` crawl of ASA 9.24(10), including mode,
   category, parameter placeholders, and inferred risk. They are version-specific references, not fillable.
 - **2,510 Cisco documentation reference entries** imported from the official ASA A–H, I–R, S, and T–Z
   command reference.
 
-Search runs locally with BM25. The 503 fillable records can also be embedded once with Ollama and merged
+Search runs locally with BM25. The 514 fillable records can also be embedded once with Ollama and merged
 with reciprocal rank fusion; the device-help and documentation entries stay BM25-only. Reference entries show
 documented syntax, modes, risk, and a link to Cisco where available, but **Fill is disabled** because they are
 not parameterized yet.

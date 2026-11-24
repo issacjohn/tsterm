@@ -156,7 +156,7 @@ describe('command catalog', () => {
     expect(verified.results[0].version).toBe('9.24(10)')
     expect(verified.results[0].reason).toMatch(/device help/i)
     expect(verified.results[1].status).toBe('documented')
-    expect(verified.results[2].status).toBe('documented')
+    expect(verified.results[2].status).toBe('verified')
     expect(verified.results[2].source).toBe('device-help')
     expect(verified.results[3].status).toBe('unknown')
 
@@ -166,6 +166,23 @@ describe('command catalog', () => {
         (match) => match.record.source === 'device-help' && match.record.referenceOnly
       )
     ).toBe(true)
+  })
+
+  it('grounds live-verified capture forms as fillable', () => {
+    const commands = service()
+    const result = commands.verifyCommands({
+      commands: [
+        'capture TSTCAP interface outside match ip any any',
+        'no capture TSTCAP',
+        'show capture TSTCAP'
+      ]
+    })
+    expect(result.results.map((item) => item.status)).toEqual([
+      'verified',
+      'verified',
+      'verified'
+    ])
+    expect(result.results[0].recordId).toContain('asa.live.capture-any-any')
   })
 
   it('finds capture commands for a natural-language symptom', async () => {

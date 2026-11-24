@@ -1,7 +1,7 @@
 {
   "name": "tsterm",
   "productName": "TSTerm",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A desktop troubleshooting console with SSH, local shells, device-aware runbooks, inline prediction, a debug guard, and an optional AI assistant that can never run commands.",
   "main": "./out/main/index.js",
   "author": "Issac John",

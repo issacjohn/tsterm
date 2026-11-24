@@ -18,6 +18,7 @@ export {
   extractInlineCommands,
   looksLikeCommand,
   parseAiContent,
+  redactUnverifiedCommands,
   sanitizeTerminalText,
   stripPromptPrefix,
   toFillableCommand

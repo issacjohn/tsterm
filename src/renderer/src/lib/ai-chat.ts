@@ -1,4 +1,10 @@
-import { isCommandRequest, isLoopbackUrl } from '@shared/ai-utils'
+import {
+  extractInlineCommands,
+  isCommandRequest,
+  isLoopbackUrl,
+  parseAiContent,
+  redactUnverifiedCommands
+} from '@shared/ai-utils'
 import type { AiChatMessage, AsaCommandRecord } from '@shared/types'
 import { buildRetrievalQuery, collectAiContext } from './ai-context'
 import { getLocalModelState } from './ai-local'
@@ -36,6 +42,68 @@ function findPane(state: AppStore, paneKey: string): PaneState | undefined {
     if (pane) return pane
   }
   return undefined
+}
+
+async function sanitizeHistory(
+  messages: AiChatMessage[],
+  strict: boolean
+): Promise<AiChatMessage[]> {
+  if (!strict) return messages
+  const commands = new Set<string>()
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue
+    for (const segment of parseAiContent(message.content)) {
+      if (segment.kind === 'code') {
+        segment.block.commands.forEach((command) => commands.add(command))
+      } else {
+        extractInlineCommands(segment.content).forEach((command) => commands.add(command))
+      }
+    }
+  }
+  if (!commands.size) {
+    return messages.map((message) =>
+      message.role === 'assistant'
+        ? {
+            ...message,
+            content: redactUnverifiedCommands(message.content, () => false).content
+          }
+        : message
+    )
+  }
+  try {
+    const result = await window.tsterm.commands.verify({
+      commands: [...commands],
+      strict: true
+    })
+    const allowed = new Set(
+      result.results
+        .filter(
+          (verification) =>
+            verification.status === 'verified' ||
+            (verification.status === 'documented' && verification.source === 'device-help')
+        )
+        .map((verification) => verification.command)
+    )
+    return messages.map((message) =>
+      message.role === 'assistant'
+        ? {
+            ...message,
+            content: redactUnverifiedCommands(message.content, (command) =>
+              allowed.has(command)
+            ).content
+          }
+        : message
+    )
+  } catch {
+    return messages.map((message) =>
+      message.role === 'assistant'
+        ? {
+            ...message,
+            content: redactUnverifiedCommands(message.content, () => false).content
+          }
+        : message
+    )
+  }
 }
 
 export function initAiChatStreaming(): () => void {
@@ -169,10 +237,14 @@ export async function sendAiMessage(
       // Command catalog retrieval is best-effort.
     }
 
+    const requestMessages = await sanitizeHistory(
+      nextMessages,
+      state.settings.aiStrictCommands
+    )
     const result = await window.tsterm.ai.chat({
       requestId,
       profileId: profile.id,
-      messages: nextMessages.slice(-12),
+      messages: requestMessages.slice(-12),
       includeContext: state.settings.aiIncludeContext,
       context: {
         ...aiContext,

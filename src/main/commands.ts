@@ -22,6 +22,7 @@ import { isOllamaProfile, ollamaBase } from './ai'
 import type { Store } from './store'
 
 const CATALOG_FILE = 'asa-commands.json'
+const LIVE_FILE = 'asa-live-verified.json'
 const REFERENCE_FILE = 'asa-reference.json'
 const DEVICE_HELP_FILE = 'asa-device-help.json'
 const EMBED_MODEL = 'nomic-embed-text'
@@ -398,7 +399,9 @@ export class CommandService {
   }
 
   private load(): void {
-    const curated = this.readCatalog(path.join(this.commandsDir, CATALOG_FILE), true)
+    const baseCurated = this.readCatalog(path.join(this.commandsDir, CATALOG_FILE), true)
+    const live = this.readCatalog(path.join(this.commandsDir, LIVE_FILE), false)
+    const curated = [...baseCurated, ...live]
     const reference = this.readCatalog(path.join(this.commandsDir, REFERENCE_FILE), false)
     const device = this.readCatalog(path.join(this.commandsDir, DEVICE_HELP_FILE), false)
     const byId = new Map<string, AsaCommandRecord>()
@@ -407,8 +410,12 @@ export class CommandService {
     }
     this.records = [...byId.values()]
     this.byId = byId
-    this.deviceHelpCount = this.records.filter((record) => record.source === 'device-help').length
-    if (!curated.length) this.warnings.push('The curated ASA command catalog is empty or missing.')
+    this.deviceHelpCount = this.records.filter(
+      (record) => record.referenceOnly && record.source === 'device-help'
+    ).length
+    if (!baseCurated.length) {
+      this.warnings.push('The curated ASA command catalog is empty or missing.')
+    }
   }
 
   private readCatalog(file: string, required: boolean): AsaCommandRecord[] {

@@ -43,6 +43,7 @@ import {
   fillTerminalPrompt,
   looksLikeCommand,
   parseAiContent,
+  redactUnverifiedCommands,
   saveCommandsAsSnippet,
   type AiBlock
 } from '../lib/ai-context'
@@ -313,13 +314,14 @@ function AssistantMessage({
   message: AiChatMessage
   streaming?: boolean
 }): React.JSX.Element {
-  const segments = parseAiContent(message.content)
-  const commands = segments.flatMap((segment) =>
+  const originalSegments = parseAiContent(message.content)
+  const commands = originalSegments.flatMap((segment) =>
     segment.kind === 'code'
       ? segment.block.commands
       : extractInlineCommands(segment.content)
   )
   const settings = useAppStore((state) => state.settings)
+  const strict = settings.aiStrictCommands
   const [verifications, setVerifications] = useState<Record<string, CommandVerification>>({})
   const [checked, setChecked] = useState(false)
 
@@ -362,17 +364,39 @@ function AssistantMessage({
   }, [message.content, streaming, settings.aiStrictCommands])
 
   const pending = streaming || (commands.length > 0 && !checked)
+  const allowed = (command: string): boolean => {
+    const verification = verifications[command]
+    return Boolean(
+      verification &&
+        (verification.status === 'verified' ||
+          (verification.status === 'documented' && verification.source === 'device-help'))
+    )
+  }
+  const redacted = strict
+    ? pending
+      ? redactUnverifiedCommands(message.content, () => false)
+      : redactUnverifiedCommands(message.content, allowed)
+    : { content: message.content, removed: [] as string[] }
+  const segments = parseAiContent(redacted.content)
+  const visibleCommands = segments.flatMap((segment) =>
+    segment.kind === 'code'
+      ? segment.block.commands
+      : extractInlineCommands(segment.content)
+  )
+  const hiddenCount = redacted.removed.length
   const counts = commands.reduce(
     (state, command) => {
-      const status = verifications[command]?.status
-      if (status === 'verified') state.verified += 1
-      else if (status === 'documented') state.documented += 1
-      else if (status === 'unknown') state.unknown += 1
+      const verification = verifications[command]
+      if (verification?.status === 'verified') state.verified += 1
+      else if (verification?.status === 'documented' && verification.source === 'device-help') {
+        state.deviceHelp += 1
+      } else if (verification?.status === 'documented') state.documented += 1
+      else if (verification?.status === 'unknown') state.unknown += 1
       return state
     },
-    { verified: 0, documented: 0, unknown: 0 }
+    { verified: 0, deviceHelp: 0, documented: 0, unknown: 0 }
   )
-  const { startsDebugOrCapture, hasCleanup, captureWarnings } = analyzeAiCommands(commands)
+  const { startsDebugOrCapture, hasCleanup, captureWarnings } = analyzeAiCommands(visibleCommands)
 
   return (
     <div className="ai-message assistant">
@@ -382,17 +406,21 @@ function AssistantMessage({
           <span>Assistant</span>
           <span className="ai-not-executed">suggestions only</span>
         </div>
-        {commands.length ? (
+        {commands.length || hiddenCount ? (
           <div
             className={cx(
               'ai-grounding-summary',
               pending
                 ? 'pending'
-                : counts.unknown
-                  ? 'unknown'
-                  : counts.documented
-                    ? 'documented'
+                : strict
+                  ? hiddenCount
+                    ? 'unknown'
                     : 'verified'
+                  : counts.unknown
+                    ? 'unknown'
+                    : counts.documented
+                      ? 'documented'
+                      : 'verified'
             )}
           >
             {pending ? (
@@ -400,15 +428,34 @@ function AssistantMessage({
                 <Loader2 size={12} className="spin" /> Checking {commands.length} command
                 {commands.length === 1 ? '' : 's'} against the local catalog…
               </>
+            ) : strict ? (
+              hiddenCount ? (
+                <>
+                  <AlertTriangle size={12} /> {hiddenCount} command
+                  {hiddenCount === 1 ? '' : 's'} hidden — not in the ASA 9.24(10) catalog. Showing only
+                  verified commands.
+                </>
+              ) : counts.deviceHelp ? (
+                <>
+                  <ShieldCheck size={12} /> All {counts.verified + counts.deviceHelp} commands recognized
+                  in the ASA 9.24(10) catalog ({counts.verified} curated, {counts.deviceHelp} device help).
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={12} /> All {counts.verified} command
+                  {counts.verified === 1 ? '' : 's'} verified in the local ASA catalog.
+                </>
+              )
             ) : counts.unknown ? (
               <>
                 <AlertTriangle size={12} /> {counts.unknown} of {commands.length} command
                 {commands.length === 1 ? '' : 's'} not found in the local catalog. Fill is disabled.
               </>
-            ) : counts.documented ? (
+            ) : counts.documented || counts.deviceHelp ? (
               <>
-                <BookOpen size={12} /> {counts.documented} reference-only command
-                {counts.documented === 1 ? '' : 's'}; Fill is disabled until an exact curated match.
+                <BookOpen size={12} /> {counts.documented + counts.deviceHelp} reference-only command
+                {counts.documented + counts.deviceHelp === 1 ? '' : 's'}; Fill is disabled until an exact
+                curated match.
               </>
             ) : (
               <>

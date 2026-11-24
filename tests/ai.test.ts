@@ -13,9 +13,11 @@ import {
   isCommandRequest,
   isLoopbackUrl,
   isSmallModelName,
+  looksLikeBareCommand,
   looksLikeCommand,
   parseAiContent,
   promptInputText,
+  redactUnverifiedCommands,
   sanitizeTerminalText,
   stripThinkTags,
   ThinkTagFilter,
@@ -742,6 +744,32 @@ describe('AI command parsing', () => {
     expect(isCommandRequest('why is the tunnel flapping')).toBe(false)
     expect(isCommandRequest('show version')).toBe(false)
     expect(isCommandRequest('what command\nshows errors')).toBe(false)
+  })
+
+  it('redacts commands that are not in the device catalog', () => {
+    const content = [
+      'Check `show version` and `show frobnicate`.',
+      '',
+      '```ciscoasa',
+      'show version',
+      'show frobnicate summary',
+      '```',
+      '',
+      '1. show version',
+      '2. show frobnicate summary'
+    ].join('\n')
+    const result = redactUnverifiedCommands(content, (command) => command === 'show version')
+    expect(result.content).toContain('show version')
+    expect(result.content).not.toContain('show frobnicate')
+    expect(result.content).toContain('[unverified command hidden]')
+    expect(result.removed.some((command) => command.includes('show frobnicate'))).toBe(true)
+  })
+
+  it('does not mistake prose for a bare command', () => {
+    expect(looksLikeBareCommand('show version')).toBe(true)
+    expect(looksLikeBareCommand('show interface ip brief')).toBe(true)
+    expect(looksLikeBareCommand('Show me the output of show version.')).toBe(false)
+    expect(looksLikeBareCommand('The command failed.')).toBe(false)
   })
 
   it('detects text already typed after the prompt', () => {

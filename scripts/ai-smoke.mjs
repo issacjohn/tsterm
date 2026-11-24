@@ -186,12 +186,17 @@ try {
   if (sent.model !== MODEL) throw new Error(`Wrong model sent: ${sent.model}`)
   if (sent.stream !== true) throw new Error('Expected a streaming request.')
 
-  await page.waitForSelector('.ai-grounding.unknown', { timeout: 20000 })
-  const unknownFill = page
-    .locator('.ai-command-wrap', { hasText: 'show frobnicate summary' })
-    .locator('.ai-fill-btn')
-  if (await unknownFill.isEnabled()) {
-    throw new Error('Fill must be disabled for a command that is not in the local catalog.')
+  await page.waitForFunction(
+    () => document.querySelector('.ai-grounding-summary')?.textContent?.includes('hidden'),
+    null,
+    { timeout: 20000 }
+  )
+  const assistantText = await page.locator('.ai-message.assistant').innerText()
+  if (assistantText.includes('show frobnicate summary')) {
+    throw new Error('Strict mode rendered a command that is not in the ASA catalog.')
+  }
+  if (!/hidden — not in the ASA 9\.24\(10\) catalog/i.test(assistantText)) {
+    throw new Error('Strict mode did not report hidden unverified commands.')
   }
 
   const beforeRows = await page.locator('.xterm-rows > div').allInnerTexts()

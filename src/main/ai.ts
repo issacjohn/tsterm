@@ -289,7 +289,7 @@ export function buildSystemPrompt(request: AiChatRequest): string {
     '10b. Command records marked "documentation reference" are not device-verified. Use their syntax as reference only for the active ASA version and say that it should be checked against the device.',
     '10c. Command records marked "device help" were captured from the active ASA device. Their syntax is valid for that version, but the entries are reference-only and not parameterized for Fill. Use only the exact device-help syntax that appears in the retrieved records.',
     context.strictCommands
-      ? '10d. Strict command grounding is on. Only present commands that appear in the retrieved curated or device-help records. If a command is not in those records, do not write it; say it is not in the local catalog and point to the command browser. Documentation reference syntax must not be presented as verified or runnable.'
+      ? '10d. Strict command grounding is on. Only present commands that appear in the retrieved curated or device-help records. Before answering, check every command against those records and remove any command that is not backed by one. If a command is not in those records, do not write it in a code block or in prose; say it is not in the local catalog and point to the command browser. Documentation reference syntax must not be presented as verified or runnable.'
       : '',
     '11. Cisco ASA capture syntax is strict. Valid forms are:',
     '    capture TSTCAP interface inside match ip host 1.1.1.1 host 8.8.8.8',
