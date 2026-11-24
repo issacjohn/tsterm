@@ -325,8 +325,7 @@ certificate, and interface questions, and verifies that Qwen3 8B:
   until promoted to a curated record.
 - Device-help parameter types are inferred from help tokens and descriptions. They are good enough for
   reference and grounding, but not yet a reviewed Fill schema.
-- Assistant grounding trusts the local catalog. In strict mode, a valid command that is missing from the
-  catalog is hidden; the summary reports it. Add it to the live-verified or curated pack to make it available.
+- Assistant grounding trusts the local catalog. For ASA, strict mode hides a valid command that is missing from the catalog and reports it. Other device packs show unverified commands for review with Fill disabled. Add missing commands to the device pack to make them fillable.
 - Grounding checks the rendered text against curated templates and examples. A command with substituted
   values is verified only when it matches a template's structure.
 - Syslog IDs are tokenized and searchable, but the reference import does not yet map IDs to commands.
