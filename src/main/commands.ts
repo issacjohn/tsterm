@@ -23,6 +23,7 @@ import type { Store } from './store'
 
 const CATALOG_FILE = 'asa-commands.json'
 const REFERENCE_FILE = 'asa-reference.json'
+const DEVICE_HELP_FILE = 'asa-device-help.json'
 const EMBED_MODEL = 'nomic-embed-text'
 const BM25_K1 = 1.4
 const BM25_B = 0.75
@@ -162,6 +163,22 @@ function compileCommandTemplate(template: string): { regex: RegExp; names: strin
     })
     .join('')
   return { regex: new RegExp(`^${source}$`, 'i'), names }
+}
+
+function templateLiteralTokens(template: string): string[] {
+  return template
+    .split(/\s+/)
+    .filter((token) => token && !/^\{[a-zA-Z0-9_]+\}$/.test(token))
+}
+
+function deviceMatcherKey(template: string): string | undefined {
+  const tokens = template.split(/\s+/).filter(Boolean)
+  if (!tokens.length || /^\{[a-zA-Z0-9_]+\}$/.test(tokens[0])) return undefined
+  const first = tokens[0].toLowerCase()
+  if (tokens[1] && !/^\{[a-zA-Z0-9_]+\}$/.test(tokens[1])) {
+    return `${first} ${tokens[1].toLowerCase()}`
+  }
+  return first
 }
 
 function commandText(record: AsaCommandRecord): string {
@@ -337,7 +354,18 @@ export class CommandService {
     specificity: number
   }> = []
   private documentedNames = new Map<string, AsaCommandRecord>()
+  private deviceExact = new Map<string, AsaCommandRecord>()
+  private deviceMatchers = new Map<
+    string,
+    Array<{
+      record: AsaCommandRecord
+      regex: RegExp
+      names: string[]
+      specificity: number
+    }>
+  >()
   private dimensions = 0
+  private deviceHelpCount = 0
   private indexing = false
   private vectorError: string | undefined
   private readonly indexDir: string
@@ -372,12 +400,14 @@ export class CommandService {
   private load(): void {
     const curated = this.readCatalog(path.join(this.commandsDir, CATALOG_FILE), true)
     const reference = this.readCatalog(path.join(this.commandsDir, REFERENCE_FILE), false)
+    const device = this.readCatalog(path.join(this.commandsDir, DEVICE_HELP_FILE), false)
     const byId = new Map<string, AsaCommandRecord>()
-    for (const record of [...curated, ...reference]) {
+    for (const record of [...curated, ...reference, ...device]) {
       if (!byId.has(record.id)) byId.set(record.id, record)
     }
     this.records = [...byId.values()]
     this.byId = byId
+    this.deviceHelpCount = this.records.filter((record) => record.source === 'device-help').length
     if (!curated.length) this.warnings.push('The curated ASA command catalog is empty or missing.')
   }
 
@@ -420,12 +450,33 @@ export class CommandService {
     this.exactCurated = new Map()
     this.templateMatchers = []
     this.documentedNames = new Map()
+    this.deviceExact = new Map()
+    this.deviceMatchers = new Map()
     this.docs = this.records.map((record) => {
       const tokens = tokenize(commandText(record))
       const unique = new Set(tokens)
       for (const token of unique) this.df.set(token, (this.df.get(token) ?? 0) + 1)
       if (record.referenceOnly) {
-        this.documentedNames.set(normalizeCommand(record.commandTemplate), record)
+        if (record.source === 'device-help') {
+          if (!/\{[a-zA-Z0-9_]+\}/.test(record.commandTemplate)) {
+            this.deviceExact.set(normalizeCommand(record.commandTemplate), record)
+          } else if (templateLiteralTokens(record.commandTemplate).length >= 2) {
+            const compiled = compileCommandTemplate(record.commandTemplate)
+            const key = deviceMatcherKey(record.commandTemplate)
+            if (key) {
+              const bucket = this.deviceMatchers.get(key) ?? []
+              bucket.push({
+                record,
+                regex: compiled.regex,
+                names: compiled.names,
+                specificity: record.commandTemplate.replace(/\{[a-zA-Z0-9_]+\}/g, '').length
+              })
+              this.deviceMatchers.set(key, bucket)
+            }
+          }
+        } else {
+          this.documentedNames.set(normalizeCommand(record.commandTemplate), record)
+        }
       } else {
         this.exactCurated.set(normalizeCommand(record.commandTemplate), record)
         for (const example of record.examples) {
@@ -446,6 +497,9 @@ export class CommandService {
     const totalLength = this.docs.reduce((sum, doc) => sum + doc.length, 0)
     this.avgLength = this.docs.length ? totalLength / this.docs.length : 1
     this.templateMatchers.sort((left, right) => right.specificity - left.specificity)
+    for (const bucket of this.deviceMatchers.values()) {
+      bucket.sort((left, right) => right.specificity - left.specificity)
+    }
   }
 
   private cacheFile(): string {
@@ -591,6 +645,7 @@ export class CommandService {
     const vectorCount = this.validEmbeddingCount()
     return {
       total: this.records.length,
+      deviceHelpCount: this.deviceHelpCount,
       vectorReady: targets.length > 0 && vectorCount === targets.length,
       vectorModel: EMBED_MODEL,
       vectorCount,
@@ -840,7 +895,10 @@ export class CommandService {
     const mode = request.mode?.trim().toLowerCase()
     return this.records.filter((record) => {
       if (request.risk && record.risk !== request.risk) return false
-      if (request.includeReference === false && record.referenceOnly) return false
+      if (request.includeReference === false && record.referenceOnly) {
+        if (record.source !== 'device-help') return false
+      }
+      if (request.includeDeviceHelp === false && record.source === 'device-help') return false
       if (mode && !record.mode.toLowerCase().includes(mode)) return false
       return true
     })
@@ -998,6 +1056,63 @@ export class CommandService {
     }
 
     const tokens = normalized.split(' ').filter(Boolean)
+
+    const deviceExact = this.deviceExact.get(normalized)
+    if (deviceExact) {
+      return {
+        command: raw,
+        status: 'documented',
+        recordId: deviceExact.id,
+        risk: deviceExact.risk,
+        source: deviceExact.source,
+        version: deviceExact.version,
+        reason: strict
+          ? `Present in the ASA ${deviceExact.version} device help. Strict mode keeps device-help entries reference-only; choose a curated command to enable Fill.`
+          : `Present in the ASA ${deviceExact.version} device help; not parameterized for Fill. Verify values on the device.`
+      }
+    }
+
+    const deviceCandidates = [
+      ...(this.deviceMatchers.get(tokens.slice(0, 2).join(' ')) ?? []),
+      ...(this.deviceMatchers.get(tokens[0]) ?? [])
+    ]
+    const seenDevice = new Set<string>()
+    let deviceStructural: AsaCommandRecord | undefined
+    for (const matcher of deviceCandidates) {
+      if (seenDevice.has(matcher.record.id)) continue
+      seenDevice.add(matcher.record.id)
+      const match = matcher.regex.exec(stripped)
+      if (!match) continue
+      deviceStructural = deviceStructural ?? matcher.record
+      const valuesAreValid = matcher.names.every((name, index) => {
+        const parameter = matcher.record.parameters.find((item) => item.name === name)
+        return !parameter || validateParameter(parameter, match[index + 1]) === null
+      })
+      if (!valuesAreValid) continue
+      return {
+        command: raw,
+        status: 'documented',
+        recordId: matcher.record.id,
+        risk: matcher.record.risk,
+        source: matcher.record.source,
+        version: matcher.record.version,
+        reason: strict
+          ? `Present in the ASA ${matcher.record.version} device help. Strict mode keeps device-help entries reference-only; choose a curated command to enable Fill.`
+          : `Present in the ASA ${matcher.record.version} device help; not parameterized for Fill. Verify values on the device.`
+      }
+    }
+    if (deviceStructural) {
+      return {
+        command: raw,
+        status: 'unknown',
+        risk: deviceStructural.risk,
+        source: deviceStructural.source,
+        version: deviceStructural.version,
+        reason:
+          'The command resembles an ASA device-help template, but a parameter value does not match the recorded format. Verify it on the device.'
+      }
+    }
+
     let documented: AsaCommandRecord | undefined
     for (let count = tokens.length; count > 0; count -= 1) {
       const candidate = this.documentedNames.get(tokens.slice(0, count).join(' '))
@@ -1013,6 +1128,7 @@ export class CommandService {
         recordId: documented.id,
         risk: documented.risk,
         source: documented.source,
+        version: documented.version,
         reason: strict
           ? 'Documentation reference only. Strict command grounding allows only exact curated matches.'
           : 'Cisco documentation reference; not parameterized or device-verified. Verify it on the device.'
@@ -1109,7 +1225,11 @@ export class CommandService {
       }
     }
 
-    let ranked = [...fused.values()].sort((a, b) => b.rrf - a.rrf)
+    let ranked = [...fused.values()].sort((a, b) => {
+      const left = a.rrf * (a.record.referenceOnly ? 0.93 : 1.04)
+      const right = b.rrf * (b.record.referenceOnly ? 0.93 : 1.04)
+      return right - left
+    })
     // A multi-word symptom question is better served by complete runbook
     // steps than by an incomplete top-level command such as "capture".
     const queryTokens = [...new Set(tokenize(query))]
@@ -1126,7 +1246,7 @@ export class CommandService {
       deduped.push(item)
       if (deduped.length >= limit) break
     }
-    const maxRrf = deduped[0]?.rrf || 1
+    const maxRrf = Math.max(...deduped.map((item) => item.rrf), 0) || 1
     const matches: CommandSearchMatch[] = deduped.map((item) => {
       const via =
         item.bm25Rank !== undefined && item.vectorRank !== undefined
@@ -1163,7 +1283,8 @@ export class CommandService {
       query,
       limit: 20,
       useVector: true,
-      includeReference: false
+      includeReference: false,
+      includeDeviceHelp: false
     })
     const ranked = search.matches.map((match) => match.record)
     // Top-level catalog entries (for example "capture") are useful for browsing

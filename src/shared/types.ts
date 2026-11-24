@@ -435,6 +435,7 @@ export interface CommandSearchRequest {
   mode?: string
   useVector?: boolean
   includeReference?: boolean
+  includeDeviceHelp?: boolean
 }
 
 export interface CommandSearchMatch {
@@ -456,6 +457,7 @@ export interface CommandSearchResult {
 
 export interface CommandStatusResult {
   total: number
+  deviceHelpCount: number
   vectorReady: boolean
   vectorModel: string
   vectorCount: number
@@ -482,6 +484,7 @@ export interface CommandVerification {
   risk?: CommandRisk
   cleanup?: string[]
   source?: string
+  version?: string
   reason?: string
 }
 

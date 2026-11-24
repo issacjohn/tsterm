@@ -418,6 +418,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
             {vectorReady
               ? `Hybrid · ${status?.vectorCount ?? 0}/${status?.vectorTargetCount ?? 0} curated embedded`
               : `BM25 only · ${status?.total ?? 0} commands`}
+            {status?.deviceHelpCount ? <em>{status.deviceHelpCount} device help</em> : null}
             {status?.vectorModel ? <em>{status.vectorModel}</em> : null}
           </div>
           <div className="modal-footer-actions">
@@ -491,7 +492,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 vectorReady ? ` · ${result.vectorReady ? 'hybrid' : 'BM25'}`
                   : ''
               }`
-            : `Type to search ${status?.total ?? 3013} ASA command records`}
+            : `Type to search ${status?.total ?? 0} ASA command records`}
         </div>
       </div>
 
@@ -607,8 +608,8 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 or an exact token like <code>%ASA-4-106023</code>.
               </p>
               <span>
-                {status?.total ?? 3013} records: fillable runbooks, complete examples, and the Cisco
-                documentation reference.
+                {status?.total ?? 0} records: fillable runbooks, complete examples, device help, and the
+                Cisco documentation reference.
               </span>
             </div>
           ) : searching && !result ? (
@@ -648,7 +649,13 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                     <span>{record.mode}</span>
                     <span>{sourceLabel(record.source)}</span>
                     {isAiPick ? <span className="cmd-ai-tag">AI pick</span> : null}
-                    {record.referenceOnly ? <span>reference</span> : null}
+                    {record.referenceOnly ? (
+                      <span>
+                        {record.source === 'device-help'
+                          ? `device ${record.version}`
+                          : 'reference'}
+                      </span>
+                    ) : null}
                     {match?.via ? <span>{match.via}</span> : null}
                     <em>
                       #{index + 1}
@@ -704,9 +711,9 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 <div className="cmd-note">
                   <Info size={13} />
                   <span>
-                    Reference entry from Cisco's ASA command reference. The syntax is documented,
-                    but this command is not parameterized for safe Fill. Use Copy or open the Cisco
-                    page.
+                    {selected.source === 'device-help'
+                      ? `Device help entry from ASA ${selected.version}. The syntax was captured from the device, but this entry is not parameterized for safe Fill. Use Copy.`
+                      : "Reference entry from Cisco's ASA command reference. The syntax is documented, but this command is not parameterized for safe Fill. Use Copy or open the Cisco page."}
                   </span>
                 </div>
               ) : null}
@@ -776,8 +783,10 @@ export function CommandBrowserModal(): React.JSX.Element | null {
 
               {isReference ? (
                 <div className="cmd-no-params">
-                  <Info size={12} /> Parameters are documented in Cisco's syntax above. This entry is
-                  not parameterized for Fill.
+                  <Info size={12} />{' '}
+                  {selected.source === 'device-help'
+                    ? 'Parameters are shown in device syntax above. This entry is not parameterized for Fill.'
+                    : "Parameters are documented in Cisco's syntax above. This entry is not parameterized for Fill."}
                 </div>
               ) : selected.parameters.length ? (
                 <div className="cmd-params">
@@ -877,7 +886,9 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 ) : null}
                 <span className="cmd-actions-hint">
                   {isReference
-                    ? 'Reference only — Copy the syntax or open the Cisco doc. Fill is disabled.'
+                    ? selected.source === 'device-help'
+                      ? 'Reference only - Copy the device syntax. Fill is disabled.'
+                      : 'Reference only - Copy the syntax or open the Cisco doc. Fill is disabled.'
                     : topLevelOnly
                       ? 'This top-level record is incomplete. Add the subcommand or choose a runbook step.'
                       : !sessionId

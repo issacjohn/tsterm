@@ -75,7 +75,20 @@ describe('command catalog', () => {
       useVector: false,
       includeReference: false
     })
-    expect(curatedOnly.matches.every((match) => !match.record.referenceOnly)).toBe(true)
+    expect(
+      curatedOnly.matches.every(
+        (match) => !match.record.referenceOnly || match.record.source === 'device-help'
+      )
+    ).toBe(true)
+
+    const fillableOnly = await commands.search({
+      query: 'aaa accounting command',
+      limit: 10,
+      useVector: false,
+      includeReference: false,
+      includeDeviceHelp: false
+    })
+    expect(fillableOnly.matches.every((match) => !match.record.referenceOnly)).toBe(true)
   })
 
   it('grounds chat commands as verified, documented, or unknown', () => {
@@ -107,6 +120,52 @@ describe('command catalog', () => {
       commands: ['capture TSTCAP interface outside match ip host 999.999.999.999 host 8.8.8.8']
     })
     expect(invalidValues.results[0].status).not.toBe('verified')
+  })
+
+  it('loads a normalized device-help pack with unique ids', () => {
+    const commands = service()
+    expect(commands.status().deviceHelpCount).toBeGreaterThan(20_000)
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(COMMANDS_DIR, 'asa-device-help.json'), 'utf8')
+    ) as { commands: AsaCommandRecord[] }
+    expect(raw.commands.length).toBeGreaterThan(20_000)
+    expect(new Set(raw.commands.map((record) => record.id)).size).toBe(raw.commands.length)
+    expect(
+      raw.commands.every(
+        (record) =>
+          record.source === 'device-help' &&
+          record.referenceOnly === true &&
+          !/[<>]/.test(record.commandTemplate)
+      )
+    ).toBe(true)
+  })
+
+  it('grounds device-help commands as reference-only entries', async () => {
+    const commands = service()
+    const verified = commands.verifyCommands({
+      commands: [
+        'show ipv6 eigrp',
+        'show ipv6 eigrp 1 events',
+        'no capture cap',
+        'show frobnicate summary'
+      ],
+      strict: true
+    })
+    expect(verified.results[0].status).toBe('documented')
+    expect(verified.results[0].source).toBe('device-help')
+    expect(verified.results[0].version).toBe('9.24(10)')
+    expect(verified.results[0].reason).toMatch(/device help/i)
+    expect(verified.results[1].status).toBe('documented')
+    expect(verified.results[2].status).toBe('documented')
+    expect(verified.results[2].source).toBe('device-help')
+    expect(verified.results[3].status).toBe('unknown')
+
+    const search = await commands.search({ query: 'ipv6 eigrp interfaces', limit: 8 })
+    expect(
+      search.matches.some(
+        (match) => match.record.source === 'device-help' && match.record.referenceOnly
+      )
+    ).toBe(true)
   })
 
   it('finds capture commands for a natural-language symptom', async () => {

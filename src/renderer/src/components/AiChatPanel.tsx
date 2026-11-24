@@ -125,7 +125,10 @@ function GroundingStatus({
   if (verification.status === 'documented') {
     return (
       <span className="ai-grounding documented">
-        <BookOpen size={10} /> Documented reference, not verified — Fill disabled
+        <BookOpen size={10} />{' '}
+        {verification.source === 'device-help'
+          ? `Device help ${verification.version ?? ''} — reference only, Fill disabled`
+          : 'Documented reference, not verified — Fill disabled'}
       </span>
     )
   }
@@ -201,7 +204,9 @@ function CommandBlock({
                 : verification?.status === 'verified'
                   ? 'Put this line in the prompt without pressing Enter'
                   : verification?.status === 'documented'
-                    ? 'Documented reference only. Choose a curated command in the command browser to enable Fill.'
+                    ? verification.source === 'device-help'
+                      ? 'Device help reference only. Choose a curated command in the command browser to enable Fill.'
+                      : 'Documented reference only. Choose a curated command in the command browser to enable Fill.'
                     : 'Not in the local ASA catalog. Verify it on the device first.'
             return (
               <div className="ai-command-wrap" key={`${command}-${index}`}>
@@ -257,7 +262,9 @@ function InlineCommand({
             ? 'Checking this command against the local catalog…'
             : verified
               ? 'Place this command in the prompt without pressing Enter'
-              : 'Unverified command. Use the command browser to choose a curated command.'
+              : verification?.source === 'device-help'
+                ? 'Device help reference only. Use the command browser to choose a curated command.'
+                : 'Unverified command. Use the command browser to choose a curated command.'
       }
     >
       <code>{code}</code>
@@ -400,8 +407,8 @@ function AssistantMessage({
               </>
             ) : counts.documented ? (
               <>
-                <BookOpen size={12} /> {counts.documented} documented reference command
-                {counts.documented === 1 ? '' : 's'}; Fill is disabled until an exact catalog match.
+                <BookOpen size={12} /> {counts.documented} reference-only command
+                {counts.documented === 1 ? '' : 's'}; Fill is disabled until an exact curated match.
               </>
             ) : (
               <>

@@ -87,27 +87,31 @@ Ollama reuses the loaded model across threads, so separate conversations do not 
 model in VRAM.
 
 Assistant replies are **grounded in the local ASA catalog**. Every fenced and inline command is checked
-before it can be filled: exact curated matches show **Verified in the local ASA catalog**, documentation-only
-syntax is marked but cannot be filled, and anything else is labeled **Not in the local ASA catalog — verify
-on the device**. The summary above each answer reports how many commands were verified. **Strict command
-grounding** is on by default and can be toggled in AI settings. Explicit command requests such as “what
-command shows interface errors?” switch the button from **Ask** to **Find command** and open the command
-browser with the question as the query instead of calling the model.
+before it can be filled: exact curated matches show **Verified in the local ASA catalog**, device-help
+matches show **Device help 9.24(10) — reference only**, Cisco documentation is marked but cannot be filled,
+and anything else is labeled **Not in the local ASA catalog — verify on the device**. The summary above each
+answer reports how many commands were verified. **Strict command grounding** is on by default and can be
+toggled in AI settings. Explicit command requests such as “what command shows interface errors?” switch the
+button from **Ask** to **Find command** and open the command browser with the question as the query instead
+of calling the model.
 
 ### ASA command reference and deterministic router
 
 ![ASA command reference and router](screenshots/commands-04-ai-route.png)
 
-**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **3,013 ASA command
+**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **27,488 ASA command
 records**:
 
 - **503 fillable records**: 75 top-level commands, 407 runbook steps, and 21 complete examples.
+- **24,475 device-help records** normalized from a read-only `?` crawl of ASA 9.24(10), including mode,
+  category, parameter placeholders, and inferred risk. They are version-specific references, not fillable.
 - **2,510 Cisco documentation reference entries** imported from the official ASA A–H, I–R, S, and T–Z
   command reference.
 
 Search runs locally with BM25. The 503 fillable records can also be embedded once with Ollama and merged
-with reciprocal rank fusion; the documentation entries stay BM25-only. Reference entries show documented
-syntax, modes, risk, and a link to Cisco, but **Fill is disabled** because they are not parameterized yet.
+with reciprocal rank fusion; the device-help and documentation entries stay BM25-only. Reference entries show
+documented syntax, modes, risk, and a link to Cisco where available, but **Fill is disabled** because they are
+not parameterized yet.
 
 The **Let AI choose** action is different from free chat. The model receives only the top fillable
 candidate records and returns JSON with a candidate ID and extracted parameter values. TSTerm rejects any
@@ -155,14 +159,14 @@ Cloud API keys are encrypted with Electron `safeStorage` and are never returned 
 endpoints such as `http://127.0.0.1:11434/v1` keep the conversation on your machine. Each request goes
 through the Electron main process, so the renderer never receives terminal-execution capability.
 
-Free chat also retrieves the top five matching command records from the local ASA catalog. Follow-up
-questions such as “why did that fail?” automatically include recent `%ASA-...` syslog IDs and the last
-terminal command in the retrieval query. Runbook matching is partial and stemmed, so natural-language
-questions are not rejected just because one word is missing. When you open the command reference with
-automatic local model downloads enabled, TSTerm installs `nomic-embed-text` if needed and builds the
-fillable-command vector index in the background. Ollama requests disable thinking tokens with
-`think: false`; DeepSeek R1 receives a larger answer budget, and literal `<think>` blocks are filtered
-from the stream.
+Free chat also retrieves the top six matching command records from the local ASA catalog, including
+version-tagged device-help references. Follow-up questions such as “why did that fail?” automatically
+include recent `%ASA-...` syslog IDs and the last terminal command in the retrieval query. Runbook matching
+is partial and stemmed, so natural-language questions are not rejected just because one word is missing.
+When you open the command reference with automatic local model downloads enabled, TSTerm installs
+`nomic-embed-text` if needed and builds the fillable-command vector index in the background. Ollama requests
+disable thinking tokens with `think: false`; DeepSeek R1 receives a larger answer budget, and literal
+`<think>` blocks are filtered from the stream.
 
 Runbook details include an **Ask AI** action that opens the assistant with that workflow as the topic, so
 you can ask what to verify before and after without retyping the commands.

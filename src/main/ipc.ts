@@ -429,7 +429,8 @@ export function registerIpc(services: IpcServices): void {
       risk,
       mode: typeof input.mode === 'string' ? input.mode.slice(0, 80) : undefined,
       useVector: input.useVector !== false,
-      includeReference: input.includeReference !== false
+      includeReference: input.includeReference !== false,
+      includeDeviceHelp: input.includeDeviceHelp !== false
     })
   })
   ipcMain.handle('commands:index-vectors', async (event, profileId?: string) => {

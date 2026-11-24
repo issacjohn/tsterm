@@ -7,12 +7,16 @@ import { useAppStore, type AppStore, type PaneState } from '../store'
 let streamUnsub: (() => void) | null = null
 
 function formatCommandHint(record: AsaCommandRecord): string {
+  const sourceNote =
+    record.source === 'device-help'
+      ? ` (device help ${record.version}, reference only)`
+      : record.referenceOnly
+        ? ' (documentation reference, not device-verified)'
+        : ''
   return [
     `### ${record.commandTemplate}`,
     record.description,
-    `Risk: ${record.risk} · Mode: ${record.mode} · Source: ${record.source}${
-      record.referenceOnly ? ' (documentation reference, not device-verified)' : ''
-    }`,
+    `Risk: ${record.risk} · Mode: ${record.mode} · Source: ${record.source}${sourceNote}`,
     record.referenceOnly && record.syntax ? `Syntax: ${record.syntax}` : '',
     record.parameters.length
       ? `Parameters: ${record.parameters
@@ -155,9 +159,10 @@ export async function sendAiMessage(
     try {
       const catalog = await window.tsterm.commands.search({
         query: retrievalQuery,
-        limit: 5,
+        limit: 6,
         useVector: true,
-        includeReference: !state.settings.aiStrictCommands
+        includeReference: !state.settings.aiStrictCommands,
+        includeDeviceHelp: true
       })
       commandHints = catalog.matches.map((match) => formatCommandHint(match.record))
     } catch {
