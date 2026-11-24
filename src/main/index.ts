@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { getCACertificates, rootCertificates, setDefaultCACertificates } from 'node:tls'
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 import type { MenuCommand } from '@shared/types'
@@ -14,6 +15,19 @@ import { AiService } from './ai'
 import { ReferenceService } from './references'
 import { CommandService } from './commands'
 import { registerIpc, sendMenuCommand } from './ipc'
+
+// Electron's Node runtime ships its own CA bundle. Corporate TLS inspection
+// (for example Cisco Secure Access) installs its root in the Windows store,
+// which Node's fetch does not read by default. Merge the system roots so AI
+// providers, update checks, and other HTTPS requests work behind that proxy.
+try {
+  const systemCertificates = getCACertificates('system')
+  if (systemCertificates.length) {
+    setDefaultCACertificates([...new Set([...rootCertificates, ...systemCertificates])])
+  }
+} catch {
+  // Older runtimes may not expose system CA loading; keep the bundled roots.
+}
 
 app.setName('TSTerm')
 if (process.platform === 'win32') app.setAppUserModelId('com.tsterm.desktop')

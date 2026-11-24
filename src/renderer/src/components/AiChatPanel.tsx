@@ -54,12 +54,6 @@ function profileLabel(profile: AiProfile | undefined): string {
   return `${profile.name}${profile.local && !/local/i.test(profile.name) ? ' · local' : ''}`
 }
 
-function contextSummary(deviceName: string | undefined, hasTail: boolean): string {
-  if (!deviceName && !hasTail) return 'No device context'
-  if (deviceName && hasTail) return `${truncate(deviceName, 24)} + terminal output`
-  return deviceName ? truncate(deviceName, 28) : 'Terminal output only'
-}
-
 function MessageAvatar({ role }: { role: 'user' | 'assistant' }): React.JSX.Element {
   return (
     <span className={cx('ai-avatar', role)}>
@@ -101,7 +95,7 @@ function GroundingStatus({
 }: {
   verification?: CommandVerification
   pending: boolean
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   if (pending) {
     return (
       <span className="ai-grounding pending">
@@ -117,11 +111,9 @@ function GroundingStatus({
     )
   }
   if (verification.status === 'verified') {
-    return (
-      <span className="ai-grounding verified">
-        <ShieldCheck size={10} /> Verified in the local ASA catalog
-      </span>
-    )
+    // The block summary already states that all commands are verified. Keeping
+    // a second label on every line is unnecessary visual noise.
+    return null
   }
   if (verification.status === 'documented') {
     return (
@@ -181,15 +173,25 @@ function CommandBlock({
     <div className="ai-code">
       <div className="ai-code-head">
         <span className="ai-code-head-label">
-          {block.language === 'text' ? 'commands' : block.language}
+          Suggested command{block.commands.length === 1 ? '' : 's'}
           {stateChanging ? <em className="ai-risk-badge">state-changing</em> : null}
         </span>
         <div className="ai-code-actions">
-          <button className="btn btn-ghost btn-xs" onClick={() => void copyAll()} title="Copy all commands">
-            <Copy size={11} /> Copy
+          <button
+            className="icon-btn tiny"
+            onClick={() => void copyAll()}
+            aria-label="Copy all suggested commands"
+            title="Copy commands"
+          >
+            <Copy size={13} />
           </button>
-          <button className="btn btn-ghost btn-xs" onClick={() => void saveSnippet()} title="Save as a snippet">
-            <Sparkles size={11} /> Snippet
+          <button
+            className="icon-btn tiny"
+            onClick={() => void saveSnippet()}
+            aria-label="Save suggested commands as a snippet"
+            title="Save as snippet"
+          >
+            <Sparkles size={13} />
           </button>
         </div>
       </div>
@@ -229,10 +231,6 @@ function CommandBlock({
         ) : (
           <pre>{block.code}</pre>
         )}
-      </div>
-      <div className="ai-code-foot">
-        <ShieldCheck size={11} />
-        Filling never presses Enter.
       </div>
     </div>
   )
@@ -323,6 +321,9 @@ function AssistantMessage({
   const settings = useAppStore((state) => state.settings)
   const pane = useAppStore(activePane)
   const deviceTypeId = pane?.deviceTypeId || pane?.session?.deviceType || '__none__'
+  const deviceType = useAppStore((state) =>
+    state.catalog.types.find((type) => type.id === deviceTypeId)
+  )
   const strict = settings.aiStrictCommands
   const strictForThisDevice = strict && deviceTypeId === 'cisco-asa'
   const [verifications, setVerifications] = useState<Record<string, CommandVerification>>({})
@@ -468,7 +469,8 @@ function AssistantMessage({
             ) : (
               <>
                 <ShieldCheck size={12} /> All {counts.verified} command
-                {counts.verified === 1 ? '' : 's'} verified in the local device catalog.
+                {counts.verified === 1 ? '' : 's'} verified in the local {deviceType?.name ?? 'device'}{' '}
+                catalog.
               </>
             )}
           </div>
@@ -534,11 +536,9 @@ function UserMessage({ message }: { message: AiChatMessage }): React.JSX.Element
 
 const SUGGESTIONS = [
   'This device is dropping traffic. What should I check first?',
-  'Help me configure this device with a safe rollback plan.',
-  'Plan a configuration change and include verification commands.',
-  'Give me a safe packet capture with the exact cleanup command.',
-  'Review the recent terminal output and suggest the next diagnostic step.',
-  'Which read-only commands prove where the problem is?'
+  'Help me configure this device with a rollback plan.',
+  'Review the recent terminal output and suggest the next step.',
+  'Give me a safe packet capture with the exact cleanup command.'
 ]
 
 export function AiChatPanel(): React.JSX.Element {
@@ -696,7 +696,7 @@ export function AiChatPanel(): React.JSX.Element {
         </div>
         <div className="ai-topline-actions">
           <button
-            className="ai-context-chip"
+            className="icon-btn tiny"
             onClick={() =>
               setModal({
                 kind: 'command-browser',
@@ -705,28 +705,31 @@ export function AiChatPanel(): React.JSX.Element {
                 deviceTypeId: activeTypeId
               })
             }
-            title="Search ASA commands or let the router choose one"
+            aria-label="Open the device command reference"
+            title="Command reference"
           >
-            <Search size={11} /> Commands
+            <Search size={13} />
           </button>
           <button
-            className={cx('ai-context-chip', settings.aiStrictCommands && 'on')}
+            className={cx('icon-btn tiny', settings.aiStrictCommands && 'active-toggle')}
             onClick={() => saveSettings({ aiStrictCommands: !settings.aiStrictCommands })}
+            aria-label="Toggle strict command grounding"
             title={
               settings.aiStrictCommands
-                ? 'Strict ASA command grounding: only exact curated or device-help ASA commands can be shown'
-                : 'Strict grounding is off; unverified commands are shown with Fill disabled'
+                ? 'Strict command grounding is on'
+                : 'Strict command grounding is off'
             }
           >
-            <ShieldCheck size={11} /> Strict
+            <ShieldCheck size={13} />
           </button>
           {referenceCount > 0 ? (
             <button
-              className="ai-reference-chip"
+              className="icon-btn tiny"
               onClick={() => setModal({ kind: 'settings', tab: 'ai' })}
-              title="Open the AI reference library"
+              aria-label={`Open reference library, ${referenceCount} documents`}
+              title={`Reference library (${referenceCount})`}
             >
-              <BookOpen size={11} /> {referenceCount}
+              <BookOpen size={13} />
             </button>
           ) : null}
           <button
@@ -735,12 +738,13 @@ export function AiChatPanel(): React.JSX.Element {
             title={contextOn ? 'Live terminal output is included' : 'Live terminal output is not included'}
           >
             {contextOn ? <Eye size={11} /> : <EyeOff size={11} />}
-            {contextOn ? 'Live context on' : 'Live context off'}
+            {contextOn ? 'Context' : 'No context'}
           </button>
           <button
             className="icon-btn tiny"
             onClick={clearChat}
             disabled={!messages.length || busy}
+            aria-label="New chat"
             title="New chat"
           >
             <Eraser size={13} />
@@ -748,26 +752,12 @@ export function AiChatPanel(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="ai-context-line">
-        <ShieldCheck size={11} />
-        <span>{contextSummary(type?.name, Boolean(contextOn && sessionId))}</span>
-        {sessionId ? (
-          <span className="ai-target">
-            <span className="status-dot connected" /> {truncate(pane?.title ?? 'session', 22)}
-          </span>
-        ) : (
-          <span className="ai-target muted">no live prompt</span>
-        )}
-      </div>
-
-      <div className={cx('ai-scope-line', !type && 'warn')}>
-        <BookOpen size={11} />
-        <span>
-          {type
-            ? `${type.name} runbooks only — other device packs are ignored.`
-            : 'No device type selected. Choose one in the session toolbar to scope the runbooks.'}
-        </span>
-      </div>
+      {!type ? (
+        <div className="ai-scope-line warn">
+          <BookOpen size={11} />
+          <span>Select a device type to scope the assistant and its commands.</span>
+        </div>
+      ) : null}
 
       {profile && isSmallModelName(profile.model) ? (
         <div className="ai-model-quality-banner">

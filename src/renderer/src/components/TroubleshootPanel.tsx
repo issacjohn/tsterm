@@ -326,10 +326,6 @@ export function TroubleshootPanel(): React.JSX.Element {
       <div className="ts-head">
         <div className="ts-title-line">
           <div>
-            <span className="eyebrow">
-              {tab === 'assistant' ? <Bot size={11} /> : <Sparkles size={11} />}
-              {tab === 'assistant' ? 'Assistant' : 'Runbooks'}
-            </span>
             <h2>Assist</h2>
           </div>
           {type ? (

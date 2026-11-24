@@ -6734,7 +6734,7 @@ input[type="range"] {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 11px 6px;
+  padding: 10px 11px 6px;
 }
 
 .ai-provider {
@@ -6974,7 +6974,7 @@ input[type="range"] {
 
 .ai-code {
   margin: 8px 0;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--bg-soft);
   overflow: hidden;
@@ -6985,11 +6985,11 @@ input[type="range"] {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 4px 6px 4px 8px;
+  padding: 5px 7px 5px 9px;
   border-bottom: 1px solid var(--border);
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 7.5px;
+  font-size: 8px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -7007,7 +7007,7 @@ input[type="range"] {
 }
 
 .ai-code-body {
-  max-height: 220px;
+  max-height: 280px;
   overflow: auto;
 }
 
@@ -7024,7 +7024,7 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 5px 4px 9px;
+  padding: 5px 6px 5px 10px;
 }
 
 .ai-command-line + .ai-command-line {
@@ -7037,7 +7037,7 @@ input[type="range"] {
   overflow-x: auto;
   color: var(--text-soft);
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.45;
   white-space: pre;
   scrollbar-width: none;
@@ -7051,14 +7051,14 @@ input[type="range"] {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  height: 21px;
-  padding: 0 5px;
+  height: 22px;
+  padding: 0 6px;
   flex-shrink: 0;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
   color: var(--faint);
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 600;
 }
 
@@ -8965,10 +8965,10 @@ input[type="range"] {
   align-items: flex-start;
   gap: 5px;
   margin: 0 0 6px;
-  padding: 5px 7px;
+  padding: 4px 7px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: var(--bg-soft);
+  background: transparent;
   color: var(--muted);
   font-size: 8.5px;
   line-height: 1.45;
@@ -8981,14 +8981,14 @@ input[type="range"] {
 
 .ai-grounding-summary.verified {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
 }
 
 .ai-grounding-summary.documented,
 .ai-grounding-summary.pending {
   border-color: color-mix(in srgb, var(--amber) 28%, var(--border));
-  background: var(--amber-soft);
+  background: transparent;
   color: var(--amber);
 }
 

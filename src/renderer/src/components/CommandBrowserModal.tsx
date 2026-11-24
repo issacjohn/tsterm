@@ -421,7 +421,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   return (
     <Modal
       title={deviceType ? `${deviceType.name} Command Reference` : 'Command Reference'}
-      description="Device-scoped command browser, BM25 + vector retrieval, and a deterministic AI router. Fill only - never Enter."
+      description="Search the active device pack. Fill only — never Enter."
       icon={<Layers size={20} />}
       size="xl"
       className="command-browser-modal"
@@ -430,11 +430,13 @@ export function CommandBrowserModal(): React.JSX.Element | null {
         <>
           <div className="cmd-footer-status">
             <span className={cx('cmd-index-dot', vectorReady ? 'ready' : 'bm25')} />
-            {vectorReady
-              ? `Hybrid · ${status?.vectorCount ?? 0}/${status?.vectorTargetCount ?? 0} curated embedded`
-              : `BM25 only · ${status?.total ?? 0} commands`}
-            {status?.deviceHelpCount ? <em>{status.deviceHelpCount} device help</em> : null}
-            {status?.vectorModel ? <em>{status.vectorModel}</em> : null}
+            {!deviceType
+              ? 'Select a device type'
+              : vectorReady
+                ? `Hybrid · ${status?.vectorCount ?? 0}/${status?.vectorTargetCount ?? 0} embedded`
+                : `BM25 · ${result?.total ?? 0} eligible`}
+            {deviceType ? <em>{deviceType.name}</em> : null}
+            {vectorReady && status?.vectorModel ? <em>{status.vectorModel}</em> : null}
           </div>
           <div className="modal-footer-actions">
             {!vectorReady ? (
@@ -640,7 +642,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
               <p>Try fewer words, a command name, or clear the risk filter.</p>
             </div>
           ) : (
-            sortedRecords.map((record, index) => {
+            sortedRecords.map((record) => {
               const match = result?.matches.find((item) => item.record.id === record.id)
               const isSelected = record.id === selectedId
               const isAiPick = record.id === route?.selected?.id
@@ -662,7 +664,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                   </div>
                   <p>{record.description}</p>
                   <div className="cmd-result-meta">
-                    <span>{record.mode}</span>
+                    {record.mode && record.mode !== 'runbook' ? <span>{record.mode}</span> : null}
                     <span>{sourceLabel(record.source)}</span>
                     {isAiPick ? <span className="cmd-ai-tag">AI pick</span> : null}
                     {record.referenceOnly ? (
@@ -672,11 +674,8 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                           : 'reference'}
                       </span>
                     ) : null}
-                    {match?.via ? <span>{match.via}</span> : null}
-                    <em>
-                      #{index + 1}
-                      {match ? ` · ${Math.round(match.score * 100)}%` : ''}
-                    </em>
+                    {match?.via === 'hybrid' ? <span>hybrid</span> : null}
+                    <em>{match ? `${Math.round(match.score * 100)}%` : ''}</em>
                   </div>
                   <ChevronRight size={13} className="cmd-result-chevron" />
                 </button>
