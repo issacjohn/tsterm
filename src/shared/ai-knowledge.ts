@@ -13,7 +13,7 @@ function describeWorkflow(workflow: Workflow): string {
   const runbook = buildRunbook(workflow, initialValues(workflow))
   const commands = runbookCommands(runbook).slice(0, 6)
   const cleanup =
-    workflow.effect === 'debug' || workflow.effect === 'capture'
+    workflow.effect === 'debug' || workflow.effect === 'capture' || workflow.effect === 'change'
       ? runbookCleanupCommands(runbook).slice(0, 4)
       : []
   return [
@@ -70,7 +70,7 @@ export function buildRunbookHints(type: DeviceType | undefined, query: string): 
     if (workflows.length < 3) {
       const categories = type.categories.map((item) => item.name).join(' · ')
       hints.push(
-        `### TSTerm catalog categories for ${type.name}\n${categories}\nOnly use runbooks from ${type.name}; ask a clarifying question if the symptom does not fit one of these categories.`.slice(
+        `### TSTerm catalog categories for ${type.name}\n${categories}\nOnly use runbooks from ${type.name}; ask a clarifying question if the goal does not fit one of these categories.`.slice(
           0,
           1200
         )

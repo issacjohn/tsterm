@@ -411,7 +411,9 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle('commands:verify', (_event, request?: CommandVerifyRequest) => {
     return commands.verifyCommands({
       commands: Array.isArray(request?.commands) ? request.commands.slice(0, 50) : [],
-      strict: request?.strict === true
+      strict: request?.strict === true,
+      deviceTypeId:
+        typeof request?.deviceTypeId === 'string' ? request.deviceTypeId.slice(0, 80) : undefined
     })
   })
   ipcMain.handle('commands:search', (_event, request?: CommandSearchRequest) => {
@@ -428,6 +430,8 @@ export function registerIpc(services: IpcServices): void {
       limit: Number(input.limit) || 8,
       risk,
       mode: typeof input.mode === 'string' ? input.mode.slice(0, 80) : undefined,
+      deviceTypeId:
+        typeof input.deviceTypeId === 'string' ? input.deviceTypeId.slice(0, 80) : undefined,
       useVector: input.useVector !== false,
       includeReference: input.includeReference !== false,
       includeDeviceHelp: input.includeDeviceHelp !== false
@@ -463,7 +467,9 @@ export function registerIpc(services: IpcServices): void {
       query: requiredString(input.query, 'Question'),
       terminalTail:
         typeof input.terminalTail === 'string' ? input.terminalTail.slice(0, 8000) : undefined,
-      profileId: optionalString(input.profileId)
+      profileId: optionalString(input.profileId),
+      deviceTypeId:
+        typeof input.deviceTypeId === 'string' ? input.deviceTypeId.slice(0, 80) : undefined
     })
   })
 

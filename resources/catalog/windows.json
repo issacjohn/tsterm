@@ -1,0 +1,269 @@
+{
+  "id": "windows",
+  "name": "Windows",
+  "vendor": "Microsoft",
+  "family": "Endpoint",
+  "description": "Windows 10/11 and Windows Server. PowerShell and built-in network tools for DNS, ports, captures, firewall, VPN, Wi-Fi, proxy, TLS, and event logs.",
+  "aliases": ["win", "win10", "win11", "windows server", "powershell"],
+  "notes": [
+    "Run PowerShell as Administrator for packet capture, firewall, and Wi-Fi report commands.",
+    "Pktmon is available on Windows 10 1809 and later.",
+    "Commands are read-only unless a workflow says otherwise."
+  ],
+  "categories": [
+    { "id": "connectivity", "name": "Connectivity", "description": "IP configuration, routes, ping, traceroute, and port tests." },
+    { "id": "dns", "name": "DNS", "description": "Resolver configuration, cache, and name lookups." },
+    { "id": "capture", "name": "Packet capture", "description": "Pktmon capture with a filter and clean stop." },
+    { "id": "ports", "name": "Ports & processes", "description": "Listeners and owning processes." },
+    { "id": "firewall", "name": "Firewall", "description": "Windows Defender Firewall profiles and rules." },
+    { "id": "vpn", "name": "VPN", "description": "Windows VPN profiles and routes." },
+    { "id": "wifi", "name": "Wi-Fi", "description": "Wireless adapter, profiles, and report." },
+    { "id": "proxy", "name": "Proxy", "description": "WinHTTP and user proxy settings." },
+    { "id": "tls", "name": "TLS / HTTP", "description": "Port, certificate, and HTTP checks." },
+    { "id": "logs", "name": "Logs", "description": "System and network profile events." },
+    { "id": "system", "name": "System health", "description": "OS, memory, disks, and adapter statistics." },
+    { "id": "dhcp", "name": "DHCP", "description": "Lease and address configuration." }
+  ],
+  "workflows": [
+    {
+      "id": "network-snapshot",
+      "title": "Network snapshot",
+      "category": "connectivity",
+      "summary": "IP configuration, adapters, routes, and DNS servers in one pass.",
+      "keywords": ["ipconfig", "adapter", "route", "dns", "windows", "snapshot"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "ipconfig /all",
+        "Get-NetIPConfiguration",
+        "Get-NetAdapter",
+        "Get-NetRoute -AddressFamily IPv4",
+        "Get-DnsClientServerAddress"
+      ]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity and port test",
+      "category": "connectivity",
+      "summary": "Ping, trace, DNS, and a TCP port test to a target.",
+      "keywords": ["ping", "tracert", "test-netconnection", "port", "connectivity", "windows"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "dst", "prompt": "Target host or IP", "type": "hostname", "required": true, "placeholder": "server.example.com" },
+        { "name": "port", "prompt": "TCP port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "Test-NetConnection {dst} -Port {port}",
+        "ping {dst}",
+        "tracert -d {dst}",
+        "Resolve-DnsName {dst}",
+        "Get-NetRoute -AddressFamily IPv4"
+      ]
+    },
+    {
+      "id": "dns-check",
+      "title": "DNS resolution and cache",
+      "category": "dns",
+      "summary": "Query a name, optionally through a specific server, and inspect the local resolver configuration.",
+      "keywords": ["dns", "resolve-dnsname", "cache", "resolver", "windows"],
+      "tags": ["dns"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "name", "prompt": "Hostname to resolve", "type": "hostname", "required": true },
+        { "name": "dns_server", "prompt": "DNS server (optional)", "type": "hostname", "required": false }
+      ],
+      "steps": [
+        "Resolve-DnsName {name}",
+        { "command": "Resolve-DnsName {name} -Server {dns_server}", "when": { "var": "dns_server", "notEmpty": true } },
+        "ipconfig /displaydns",
+        "Get-DnsClientServerAddress"
+      ]
+    },
+    {
+      "id": "pktmon-capture",
+      "title": "Pktmon packet capture",
+      "category": "capture",
+      "summary": "Filter, capture, stop, and convert a Windows packet trace to text.",
+      "keywords": ["pktmon", "packet capture", "etl", "windows", "filter", "pcap"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["Administrator PowerShell"],
+      "variables": [
+        { "name": "src", "prompt": "Local or remote IP to match", "type": "ip", "required": true },
+        { "name": "port", "prompt": "Port to match", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "pktmon filter remove",
+        "pktmon filter add -i {src} -p {port}",
+        "pktmon start --capture --pkt-size 128 --file-name tstcap.etl",
+        { "instruction": "Reproduce the problem, then stop the capture." },
+        "pktmon stop",
+        "pktmon format tstcap.etl -o tstcap.txt",
+        "Get-Content tstcap.txt -TotalCount 200"
+      ],
+      "cleanup": [
+        "pktmon stop",
+        "pktmon filter remove"
+      ],
+      "notes": ["Run pktmon in an elevated PowerShell session.", "The ETL file is in the current working directory."]
+    },
+    {
+      "id": "port-listeners",
+      "title": "Port listeners and owning process",
+      "category": "ports",
+      "summary": "Find listeners on a port and identify the process using it.",
+      "keywords": ["port", "listener", "netstat", "tcp", "process", "windows"],
+      "tags": ["ports"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "port", "prompt": "Local port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "Get-NetTCPConnection -LocalPort {port}",
+        "netstat -ano | findstr :{port}",
+        "Get-NetTCPConnection -State Listen | Select-Object -First 40",
+        "Get-Process | Sort-Object CPU -Descending | Select-Object -First 15"
+      ]
+    },
+    {
+      "id": "firewall-check",
+      "title": "Firewall profiles and rules",
+      "category": "firewall",
+      "summary": "Inspect Windows Defender Firewall state and the inbound rules that are enabled.",
+      "keywords": ["firewall", "defender", "profile", "rule", "windows"],
+      "tags": ["firewall"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["Administrator PowerShell for full rule details"],
+      "steps": [
+        "Get-NetFirewallProfile",
+        "Get-NetFirewallRule -Enabled True -Direction Inbound | Select-Object -First 40",
+        "netsh advfirewall show allprofiles"
+      ]
+    },
+    {
+      "id": "vpn-check",
+      "title": "Windows VPN profile and routes",
+      "category": "vpn",
+      "summary": "Inspect a VPN profile, its connection state, and the routes it installs.",
+      "keywords": ["vpn", "ras", "profile", "route", "windows"],
+      "tags": ["vpn"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "vpn", "prompt": "VPN connection name", "type": "string", "required": true }
+      ],
+      "steps": [
+        "Get-VpnConnection",
+        "Get-VpnConnection -Name \"{vpn}\"",
+        "route print",
+        "Get-NetIPInterface"
+      ]
+    },
+    {
+      "id": "wifi-check",
+      "title": "Wi-Fi adapter and profiles",
+      "category": "wifi",
+      "summary": "Inspect wireless state, saved profiles, and generate a WLAN report.",
+      "keywords": ["wifi", "wireless", "wlan", "profile", "windows"],
+      "tags": ["wifi"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["Administrator PowerShell for the WLAN report"],
+      "steps": [
+        "netsh wlan show interfaces",
+        "netsh wlan show profiles",
+        "netsh wlan show wlanreport",
+        { "instruction": "Open the HTML report path printed by the command and inspect disconnect reasons and signal history." }
+      ],
+      "notes": ["WLAN report generation can take a few seconds."]
+    },
+    {
+      "id": "proxy-check",
+      "title": "Proxy configuration",
+      "category": "proxy",
+      "summary": "Inspect machine-wide WinHTTP proxy and the current user's Internet Settings.",
+      "keywords": ["proxy", "winhttp", "internet settings", "windows"],
+      "tags": ["proxy"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "netsh winhttp show proxy",
+        "Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings' | Select-Object ProxyEnable, ProxyServer, AutoConfigURL",
+        "curl.exe -v --connect-timeout 10 https://www.microsoft.com"
+      ]
+    },
+    {
+      "id": "tls-check",
+      "title": "TLS and HTTP endpoint check",
+      "category": "tls",
+      "summary": "Test a TLS port, print the certificate chain, and inspect an HTTP response.",
+      "keywords": ["tls", "ssl", "certificate", "https", "curl", "openssl", "windows"],
+      "tags": ["tls"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "host", "prompt": "Hostname", "type": "hostname", "required": true },
+        { "name": "port", "prompt": "TLS port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "Test-NetConnection {host} -Port {port}",
+        "curl.exe -v --connect-timeout 10 https://{host}:{port}/",
+        { "command": "openssl s_client -connect {host}:{port} -servername {host}", "note": "Requires OpenSSL (Git for Windows, OpenSSL, or WSL)." }
+      ]
+    },
+    {
+      "id": "event-logs",
+      "title": "System and network event logs",
+      "category": "logs",
+      "summary": "Read the latest system events and network profile events.",
+      "keywords": ["event log", "windows", "system", "network profile", "errors"],
+      "tags": ["logs"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "Get-WinEvent -LogName System -MaxEvents 40",
+        "Get-WinEvent -LogName 'Microsoft-Windows-NetworkProfile/Operational' -MaxEvents 40",
+        "Get-NetAdapterStatistics"
+      ]
+    },
+    {
+      "id": "system-health",
+      "title": "System health",
+      "category": "system",
+      "summary": "OS version, memory, disks, and adapter statistics.",
+      "keywords": ["health", "os", "memory", "disk", "adapter", "windows"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "Get-ComputerInfo | Select-Object WindowsProductName, OsVersion, CsTotalPhysicalMemory",
+        "Get-CimInstance Win32_OperatingSystem | Select-Object LastBootUpTime, FreePhysicalMemory, TotalVisibleMemorySize",
+        "Get-PSDrive C",
+        "Get-NetAdapter | Format-Table Name, Status, LinkSpeed"
+      ]
+    },
+    {
+      "id": "dhcp-check",
+      "title": "DHCP and address state",
+      "category": "dhcp",
+      "summary": "Inspect address assignment and DHCP-enabled interfaces.",
+      "keywords": ["dhcp", "lease", "ip address", "windows"],
+      "tags": ["dhcp"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "ipconfig /all",
+        "Get-NetIPAddress",
+        "Get-NetIPInterface",
+        "Get-DnsClientServerAddress"
+      ]
+    }
+  ]
+}

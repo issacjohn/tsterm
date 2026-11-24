@@ -128,6 +128,13 @@ try {
   await page.locator('.sidebar-local').click()
   await page.waitForTimeout(3000)
   await page.waitForSelector('.connection-pill.connected', { timeout: 20000 })
+  await page.locator('.device-chip').click()
+  await page.waitForSelector('.device-search input')
+  await page.locator('.device-search input').fill('ASA')
+  await page.waitForTimeout(300)
+  await page.locator('.device-option', { hasText: 'Cisco ASA' }).first().click()
+  await page.getByRole('button', { name: /Use Cisco ASA/ }).click()
+  await page.waitForTimeout(400)
 
   await page.locator('.ts-mode-tabs button', { hasText: 'Assistant' }).click()
   await page.waitForSelector('.ai-opt-in')

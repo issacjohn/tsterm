@@ -54,7 +54,7 @@ export function TopBar({
           <span className="wordmark">
             TS<span>Term</span>
           </span>
-          <span className="brand-sub">Troubleshooting console</span>
+          <span className="brand-sub">Network operations console</span>
         </div>
       </div>
 

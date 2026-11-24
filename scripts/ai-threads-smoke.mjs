@@ -186,6 +186,12 @@ try {
   if (winRequest.system.includes('Cisco ASA runbook')) {
     throw new Error('ASA runbook context leaked into the Windows request.')
   }
+  if (
+    winRequest.system.includes('Top-level ASA commands') ||
+    winRequest.system.includes('capture TSTCAP')
+  ) {
+    throw new Error('ASA command syntax leaked into the Windows request.')
+  }
 
   console.log('\nPer-terminal AI thread smoke test complete')
   console.log('Top bar:', topVersion.replace(/\s+/g, ' ').trim())

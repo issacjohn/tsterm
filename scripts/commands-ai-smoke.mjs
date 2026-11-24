@@ -49,13 +49,22 @@ try {
 
   await page.waitForSelector('.app', { timeout: 30000 })
   await page.waitForTimeout(900)
+  await page.getByText('Local terminal', { exact: true }).first().click()
+  await page.waitForSelector('.connection-pill.connected', { timeout: 20000 })
+  await page.locator('.device-chip').click()
+  await page.waitForSelector('.device-search input')
+  await page.locator('.device-search input').fill('ASA')
+  await page.waitForTimeout(300)
+  await page.locator('.device-option', { hasText: 'Cisco ASA' }).first().click()
+  await page.getByRole('button', { name: /Use Cisco ASA/ }).click()
+  await page.waitForTimeout(500)
 
   const clicked = await app.evaluate(({ Menu }) => {
     const menu = Menu.getApplicationMenu()
     if (!menu) return false
     const find = (items) => {
       for (const item of items) {
-        if (item.label === 'ASA Command Reference') {
+        if (item.label === 'Command Reference') {
           item.click()
           return true
         }
@@ -65,7 +74,7 @@ try {
     }
     return find(menu.items)
   })
-  if (!clicked) throw new Error('ASA Command Reference menu item was not found.')
+  if (!clicked) throw new Error('Command Reference menu item was not found.')
 
   await page.waitForSelector('.command-browser-modal', { timeout: 5000 })
   const input = page.locator('.cmd-search input')

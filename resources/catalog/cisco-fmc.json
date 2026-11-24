@@ -1,0 +1,184 @@
+{
+  "id": "cisco-fmc",
+  "name": "Cisco FMC",
+  "vendor": "Cisco",
+  "family": "Cloud",
+  "description": "Cisco Firepower Management Center. Deployment health, disk, database, backup, licensing, and expert-mode diagnostics.",
+  "aliases": ["fmc", "firepower management center", "firepower", "management center"],
+  "notes": [
+    "Most FMC workflows start in the web UI; the CLI is intentionally limited.",
+    "Expert mode is a Linux shell. Use read-only commands.",
+    "FMC does not manage traffic inline; FTD is the enforcement point."
+  ],
+  "categories": [
+    { "id": "health", "name": "System health", "description": "CPU, memory, disk, database, and health monitor." },
+    { "id": "deployment", "name": "Deployment", "description": "Device registration and deploy tasks." },
+    { "id": "backup", "name": "Backup & restore", "description": "Configuration backups and restore readiness." },
+    { "id": "licensing", "name": "Licensing", "description": "Smart licensing and feature entitlements." },
+    { "id": "diagnostics", "name": "Expert mode", "description": "Linux-level checks for disk, services, and logs." },
+    { "id": "intel", "name": "Security intelligence", "description": "URL, DNS, and threat-intelligence updates." }
+  ],
+  "workflows": [
+    {
+      "id": "health-monitor",
+      "title": "FMC health snapshot",
+      "category": "health",
+      "summary": "Collect version, CPU, memory, disk, and process state from the CLI and health monitor.",
+      "keywords": ["health", "cpu", "memory", "disk", "processes", "fmc"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC CLI access", "admin role"],
+      "steps": [
+        "show version",
+        "show cpu",
+        "show memory",
+        "show disk",
+        "show processes",
+        { "instruction": "In the FMC UI, open System > Health > Monitor and check the health policy for the management center." }
+      ],
+      "notes": ["A high CPU reading during a deploy or report can be normal. Compare against the health monitor history."]
+    },
+    {
+      "id": "disk-pressure",
+      "title": "Disk full or database pressure",
+      "category": "health",
+      "summary": "Check disk usage, large files, and the health alerts that indicate database or disk pressure.",
+      "keywords": ["disk", "full", "database", "storage", "logs", "fmc"],
+      "tags": ["disk"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["FMC CLI access", "expert mode for du"],
+      "steps": [
+        "show disk",
+        { "instruction": "In the FMC UI, open System > Health > Monitor and review disk and database alerts." },
+        { "instruction": "In expert mode, run 'sudo df -h' and check the partitions that are above 85 percent." },
+        { "instruction": "Review System > Tools > Backup and remove old backups only after confirming a current backup exists." }
+      ],
+      "notes": ["Never delete database files directly. Use the FMC UI and Cisco support guidance."]
+    },
+    {
+      "id": "deployment-issues",
+      "title": "Device deployment failures",
+      "category": "deployment",
+      "summary": "Trace a failed FTD deployment through device status, tasks, and policy validation.",
+      "keywords": ["deploy", "deployment", "task", "policy", "ftd", "registration"],
+      "tags": ["deployment"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC UI access"],
+      "steps": [
+        { "instruction": "Open Devices > Device Management and check the FTD status, registration, and last deploy time." },
+        { "instruction": "Open Tasks and read the failed deploy task. Expand policy validation and device communication errors." },
+        { "instruction": "Check the FTD side with 'show managers' to confirm it is still registered to this FMC." },
+        { "instruction": "If the failure is policy-related, inspect the access control, NAT, and platform settings that changed." }
+      ],
+      "notes": ["A device that shows as unreachable needs network and sftunnel checks before policy troubleshooting."]
+    },
+    {
+      "id": "registration-tunnel",
+      "title": "FTD registration and sftunnel",
+      "category": "deployment",
+      "summary": "Confirm the FMC-to-FTD management tunnel and registration state.",
+      "keywords": ["sftunnel", "registration", "management", "tunnel", "ftd", "fmc"],
+      "tags": ["registration"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC UI access", "FTD CLI access"],
+      "steps": [
+        { "instruction": "In FMC, open Devices > Device Management and check the device status and last seen time." },
+        { "instruction": "On the FTD CLI, run 'show managers' and confirm the FMC address and registration state." },
+        { "instruction": "If the tunnel is down, verify management IP, default route, DNS, and TCP 8305 between FTD and FMC." },
+        { "instruction": "After connectivity is restored, refresh the device in FMC and retry the deployment." }
+      ]
+    },
+    {
+      "id": "expert-services",
+      "title": "Expert mode — services and logs",
+      "category": "diagnostics",
+      "summary": "Use read-only Linux commands to inspect disk, memory, services, and recent logs.",
+      "keywords": ["expert", "linux", "services", "logs", "memory", "fmc"],
+      "tags": ["expert"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["expert mode password"],
+      "steps": [
+        { "instruction": "From the FMC CLI, run 'expert' and enter the expert password." },
+        "sudo df -h",
+        "sudo free -m",
+        "top -b -n1 | head -30",
+        "sudo systemctl status sfmgr",
+        "sudo tail -50 /var/log/messages",
+        { "instruction": "Exit expert mode when finished. Do not restart services without Cisco guidance." }
+      ],
+      "notes": ["Expert mode is a root Linux shell. Use it for observation, not for changes during an incident."]
+    },
+    {
+      "id": "backup-check",
+      "title": "Backup and restore readiness",
+      "category": "backup",
+      "summary": "Verify that a recent configuration backup exists and that the restore target is compatible.",
+      "keywords": ["backup", "restore", "configuration", "disaster recovery", "fmc"],
+      "tags": ["backup"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC UI access"],
+      "steps": [
+        { "instruction": "Open System > Tools > Backup/Restore and check the latest backup status and timestamp." },
+        { "instruction": "Confirm the backup is stored off the FMC appliance." },
+        { "instruction": "Record the FMC version and build; a restore target must run the same or a supported version." },
+        { "instruction": "Check that the backup includes the configuration and, if required, the events data." }
+      ]
+    },
+    {
+      "id": "licensing",
+      "title": "Smart licensing status",
+      "category": "licensing",
+      "summary": "Inspect registration, entitlements, and expired or out-of-compliance licenses.",
+      "keywords": ["license", "smart licensing", "entitlement", "registration", "fmc"],
+      "tags": ["licensing"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC UI access"],
+      "steps": [
+        { "instruction": "Open System > Licenses > Smart Licenses and check the registration status." },
+        { "instruction": "Review the entitlement table for expired, out-of-compliance, or insufficient licenses." },
+        { "instruction": "Check the FTD device licenses under Devices > Device Management > Licenses." },
+        { "instruction": "If registration is stale, verify outbound HTTPS to the Cisco licensing service." }
+      ]
+    },
+    {
+      "id": "intel-updates",
+      "title": "Security intelligence updates",
+      "category": "intel",
+      "summary": "Check URL, DNS, and intelligence feed update status.",
+      "keywords": ["intelligence", "url", "dns", "feed", "update", "fmc"],
+      "tags": ["intel"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC UI access"],
+      "steps": [
+        { "instruction": "Open System > Updates and review the last update times for intelligence feeds." },
+        { "instruction": "Check Tasks for failed update jobs and the reported error." },
+        { "instruction": "Verify the FMC can reach the Cisco update service over HTTPS." },
+        { "instruction": "Compare the feed version with the FTDs to confirm the devices have received the update." }
+      ]
+    },
+    {
+      "id": "time-ntp",
+      "title": "Time and NTP",
+      "category": "health",
+      "summary": "Verify the FMC clock and NTP synchronization because auth and correlation depend on it.",
+      "keywords": ["ntp", "time", "clock", "certificate", "fmc"],
+      "tags": ["ntp"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC CLI access"],
+      "steps": [
+        "show time",
+        "show ntp",
+        { "instruction": "In the FMC UI, open System > Configuration > Time and confirm the NTP servers." }
+      ]
+    }
+  ]
+}

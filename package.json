@@ -1,7 +1,7 @@
 {
   "name": "tsterm",
   "productName": "TSTerm",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "A desktop troubleshooting console with SSH, local shells, device-aware runbooks, inline prediction, a debug guard, and an optional AI assistant that can never run commands.",
   "main": "./out/main/index.js",
   "author": "Issac John",
@@ -37,6 +37,7 @@
     "catalog:build": "node scripts/build-asa-command-catalog.mjs",
     "commands:import-reference": "node scripts/import-asa-command-reference.mjs",
     "commands:import-device-help": "node scripts/import-device-command-help.mjs",
+    "commands:build-devices": "node scripts/build-device-command-catalogs.mjs",
     "test:update": "node scripts/update-smoke.mjs",
     "test:packaged": "node scripts/package-smoke.mjs",
     "icon": "node scripts/make-icon.mjs",

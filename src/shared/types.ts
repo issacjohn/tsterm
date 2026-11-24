@@ -408,7 +408,8 @@ export interface CommandParameter {
 
 export interface AsaCommandRecord {
   id: string
-  vendor: 'cisco-asa'
+  vendor: string
+  deviceTypeId?: string
   commandTemplate: string
   optionalTemplate?: string
   description: string
@@ -433,6 +434,7 @@ export interface CommandSearchRequest {
   limit?: number
   risk?: CommandRisk
   mode?: string
+  deviceTypeId?: string
   useVector?: boolean
   includeReference?: boolean
   includeDeviceHelp?: boolean
@@ -491,6 +493,7 @@ export interface CommandVerification {
 export interface CommandVerifyRequest {
   commands: string[]
   strict?: boolean
+  deviceTypeId?: string
 }
 
 export interface CommandVerifyResult {
@@ -510,6 +513,7 @@ export interface CommandRouteRequest {
   query: string
   terminalTail?: string
   profileId?: string
+  deviceTypeId?: string
 }
 
 export interface CommandRouteResult {

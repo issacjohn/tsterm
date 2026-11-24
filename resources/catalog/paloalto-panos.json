@@ -1,0 +1,270 @@
+{
+  "id": "paloalto-panos",
+  "name": "Palo Alto PAN-OS",
+  "vendor": "Palo Alto Networks",
+  "family": "Firewall",
+  "description": "Palo Alto Networks PAN-OS firewalls. Packet capture, policy tests, sessions, VPN, identity, counters, and HA.",
+  "aliases": ["palo alto", "panos", "pan-os", "pa-vm", "paloalto", "globalprotect"],
+  "notes": [
+    "Commands are entered from the PAN-OS operational CLI.",
+    "Packet-diag captures write a pcap on the firewall; export it with scp or the web UI.",
+    "Do not leave IKE debugging enabled after the test."
+  ],
+  "categories": [
+    { "id": "capture", "name": "Packet capture", "description": "Dataplane packet-diag filters and pcap capture." },
+    { "id": "connectivity", "name": "Connectivity", "description": "Ping, traceroute, sessions, and route lookup." },
+    { "id": "policy", "name": "Policy & NAT", "description": "Security policy, NAT, and routing tests." },
+    { "id": "vpn", "name": "VPN / IPsec", "description": "IKE, IPsec, and tunnel status." },
+    { "id": "identity", "name": "User-ID", "description": "IP-to-user mapping and group lookups." },
+    { "id": "system", "name": "System health", "description": "Counters, drops, jobs, and resources." },
+    { "id": "ha", "name": "High availability", "description": "HA state, path monitoring, and peer health." },
+    { "id": "dhcp", "name": "DHCP", "description": "DHCP server leases and client state." }
+  ],
+  "workflows": [
+    {
+      "id": "capture-host",
+      "title": "Packet capture — host to host",
+      "category": "capture",
+      "summary": "Filter a dataplane capture to one host pair, write a pcap, and stop cleanly.",
+      "keywords": ["packet capture", "packet-diag", "pcap", "palo alto", "host", "sniffer"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["superuser", "dataplane capture permission"],
+      "variables": [
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "debug dataplane packet-diag set filter match source {src} destination {dst}",
+        "debug dataplane packet-diag set filter on",
+        "debug dataplane packet-diag set capture stage firewall file TSTCAP.pcap",
+        "debug dataplane packet-diag set capture on",
+        { "instruction": "Generate the traffic, then inspect the settings and stop the capture." },
+        "debug dataplane packet-diag show settings"
+      ],
+      "cleanup": [
+        "debug dataplane packet-diag set capture off",
+        "debug dataplane packet-diag set filter off"
+      ],
+      "notes": [
+        "Export the pcap from the firewall with scp or the web UI.",
+        "Remember to turn the filter off; otherwise later captures inherit it."
+      ]
+    },
+    {
+      "id": "capture-port",
+      "title": "Packet capture — application port",
+      "category": "capture",
+      "summary": "Capture a single source/destination/port flow and save it.",
+      "keywords": ["packet capture", "packet-diag", "port", "pcap", "palo alto"],
+      "tags": ["capture", "application"],
+      "severity": "caution",
+      "effect": "capture",
+      "requires": ["superuser"],
+      "variables": [
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "port", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "debug dataplane packet-diag set filter match source {src} destination {dst} destination-port {port}",
+        "debug dataplane packet-diag set filter on",
+        "debug dataplane packet-diag set capture stage firewall file TSTCAP.pcap",
+        "debug dataplane packet-diag set capture on",
+        { "instruction": "Reproduce the flow, then stop the capture." },
+        "debug dataplane packet-diag show settings"
+      ],
+      "cleanup": [
+        "debug dataplane packet-diag set capture off",
+        "debug dataplane packet-diag set filter off"
+      ]
+    },
+    {
+      "id": "session-lookup",
+      "title": "Session lookup",
+      "category": "connectivity",
+      "summary": "Find sessions for a source or destination and inspect session metadata.",
+      "keywords": ["session", "flow", "palo alto", "lookup", "connection"],
+      "tags": ["sessions"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser or read-only"],
+      "variables": [
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "show session all filter source {src} destination {dst}",
+        "show session info",
+        "show session meter"
+      ]
+    },
+    {
+      "id": "policy-test",
+      "title": "Policy, NAT, and route tests",
+      "category": "policy",
+      "summary": "Ask PAN-OS which security policy, NAT rule, and route will handle a flow.",
+      "keywords": ["policy", "security-policy-match", "nat", "test", "fib", "palo alto"],
+      "tags": ["policy"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "variables": [
+        { "name": "src_zone", "prompt": "Source zone", "type": "string", "default": "trust" },
+        { "name": "dst_zone", "prompt": "Destination zone", "type": "string", "default": "untrust" },
+        { "name": "proto", "prompt": "Protocol", "type": "choice", "default": "tcp", "choices": ["tcp", "udp"] },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "port", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "test security-policy-match from {src_zone} to {dst_zone} source {src} destination {dst} destination-port {port} protocol {proto}",
+        "test nat-policy-match from {src_zone} to {dst_zone} source {src} destination {dst} destination-port {port} protocol {proto}",
+        "test routing fib-lookup virtual-router default ip {dst}"
+      ]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity and route check",
+      "category": "connectivity",
+      "summary": "Ping, trace, route, ARP, and interface checks for a target.",
+      "keywords": ["ping", "traceroute", "route", "arp", "interface", "palo alto"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser or read-only"],
+      "variables": [
+        { "name": "dst", "prompt": "Target IP or hostname", "type": "hostname", "required": true }
+      ],
+      "steps": [
+        "ping host {dst}",
+        "traceroute host {dst}",
+        "show routing route",
+        "show arp all",
+        "show interface all"
+      ]
+    },
+    {
+      "id": "vpn-status",
+      "title": "VPN IKE and IPsec status",
+      "category": "vpn",
+      "summary": "Inspect IKE gateways, IPsec tunnels, and VPN flow state.",
+      "keywords": ["vpn", "ike", "ipsec", "tunnel", "globalprotect", "palo alto"],
+      "tags": ["vpn"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "steps": [
+        "show vpn ike-sa",
+        "show vpn ipsec-sa",
+        "show vpn flow"
+      ]
+    },
+    {
+      "id": "ike-debug",
+      "title": "IKE debug",
+      "category": "vpn",
+      "summary": "Enable global IKE debug output for a failing tunnel and disable it immediately after.",
+      "keywords": ["vpn", "ike", "debug", "tunnel", "palo alto"],
+      "tags": ["vpn", "debug"],
+      "severity": "danger",
+      "effect": "debug",
+      "requires": ["superuser", "maintenance window"],
+      "steps": [
+        "debug ike global on debug",
+        { "instruction": "Bring up the tunnel or send traffic, then inspect the system log and IKE output." },
+        "show vpn ike-sa",
+        "show log system"
+      ],
+      "cleanup": ["debug ike global off"],
+      "notes": ["Leaving IKE debug on can fill logs and consume CPU. Disable it immediately after the test."]
+    },
+    {
+      "id": "user-id",
+      "title": "User-ID and IP mapping",
+      "category": "identity",
+      "summary": "Find the user mapped to an IP and list known groups.",
+      "keywords": ["user-id", "identity", "user", "ip mapping", "group", "palo alto"],
+      "tags": ["identity"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "variables": [
+        { "name": "src", "prompt": "Client IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "show user ip-user-mapping all",
+        "show user ip-user-mapping ip {src}",
+        "show user group list"
+      ],
+      "notes": ["If the mapping is missing, check the User-ID agent, GlobalProtect, or the authentication profile."]
+    },
+    {
+      "id": "counters-drops",
+      "title": "Drops and global counters",
+      "category": "system",
+      "summary": "Find drop counters and resource pressure on the dataplane.",
+      "keywords": ["drops", "counters", "cpu", "resources", "palo alto", "sessions"],
+      "tags": ["drops"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "steps": [
+        "show counter global filter delta yes",
+        "show counter global | match drop",
+        "show system resources",
+        "show session info"
+      ]
+    },
+    {
+      "id": "ha-health",
+      "title": "High availability health",
+      "category": "ha",
+      "summary": "Inspect HA state, peer information, and path monitoring.",
+      "keywords": ["ha", "high availability", "failover", "path monitoring", "palo alto"],
+      "tags": ["ha"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "steps": [
+        "show high-availability state",
+        "show high-availability info",
+        "show high-availability path-monitoring"
+      ]
+    },
+    {
+      "id": "dhcp-check",
+      "title": "DHCP server and client state",
+      "category": "dhcp",
+      "summary": "Inspect DHCP leases and client assignments.",
+      "keywords": ["dhcp", "lease", "client", "server", "palo alto"],
+      "tags": ["dhcp"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "steps": [
+        "show dhcp server lease",
+        "show dhcp client",
+        "show dhcp server statistics"
+      ]
+    },
+    {
+      "id": "system-health",
+      "title": "System health and jobs",
+      "category": "system",
+      "summary": "Check resources, jobs, commits, and administrators.",
+      "keywords": ["health", "jobs", "commit", "resources", "admins", "palo alto"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["superuser"],
+      "steps": [
+        "show system resources",
+        "show jobs all",
+        "show running resource-monitor",
+        "show admins"
+      ]
+    }
+  ]
+}

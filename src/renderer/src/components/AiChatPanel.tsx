@@ -135,7 +135,7 @@ function GroundingStatus({
   }
   return (
     <span className="ai-grounding unknown">
-      <AlertTriangle size={10} /> Not in the local ASA catalog — verify on the device
+      <AlertTriangle size={10} /> Not in the local device catalog — verify on the device
     </span>
   )
 }
@@ -208,7 +208,7 @@ function CommandBlock({
                     ? verification.source === 'device-help'
                       ? 'Device help reference only. Choose a curated command in the command browser to enable Fill.'
                       : 'Documented reference only. Choose a curated command in the command browser to enable Fill.'
-                    : 'Not in the local ASA catalog. Verify it on the device first.'
+                    : 'Not in the local device catalog. Verify it on the device first.'
             return (
               <div className="ai-command-wrap" key={`${command}-${index}`}>
                 <div className="ai-command-line">
@@ -321,7 +321,10 @@ function AssistantMessage({
       : extractInlineCommands(segment.content)
   )
   const settings = useAppStore((state) => state.settings)
+  const pane = useAppStore(activePane)
+  const deviceTypeId = pane?.deviceTypeId || pane?.session?.deviceType || '__none__'
   const strict = settings.aiStrictCommands
+  const strictForThisDevice = strict && deviceTypeId === 'cisco-asa'
   const [verifications, setVerifications] = useState<Record<string, CommandVerification>>({})
   const [checked, setChecked] = useState(false)
 
@@ -332,7 +335,11 @@ function AssistantMessage({
     if (streaming || unique.length === 0) return
     let cancelled = false
     void window.tsterm.commands
-      .verify({ commands: unique, strict: settings.aiStrictCommands })
+      .verify({
+        commands: unique,
+        strict: settings.aiStrictCommands && deviceTypeId === 'cisco-asa',
+        deviceTypeId
+      })
       .then((result) => {
         if (cancelled) return
         setVerifications(
@@ -361,7 +368,7 @@ function AssistantMessage({
     }
     // Verification is keyed to the completed answer text and ground mode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.content, streaming, settings.aiStrictCommands])
+  }, [message.content, streaming, settings.aiStrictCommands, deviceTypeId])
 
   const pending = streaming || (commands.length > 0 && !checked)
   const allowed = (command: string): boolean => {
@@ -372,7 +379,7 @@ function AssistantMessage({
           (verification.status === 'documented' && verification.source === 'device-help'))
     )
   }
-  const redacted = strict
+  const redacted = strictForThisDevice
     ? pending
       ? redactUnverifiedCommands(message.content, () => false)
       : redactUnverifiedCommands(message.content, allowed)
@@ -412,7 +419,7 @@ function AssistantMessage({
               'ai-grounding-summary',
               pending
                 ? 'pending'
-                : strict
+                : strictForThisDevice
                   ? hiddenCount
                     ? 'unknown'
                     : 'verified'
@@ -428,7 +435,7 @@ function AssistantMessage({
                 <Loader2 size={12} className="spin" /> Checking {commands.length} command
                 {commands.length === 1 ? '' : 's'} against the local catalog…
               </>
-            ) : strict ? (
+            ) : strictForThisDevice ? (
               hiddenCount ? (
                 <>
                   <AlertTriangle size={12} /> {hiddenCount} command
@@ -449,7 +456,8 @@ function AssistantMessage({
             ) : counts.unknown ? (
               <>
                 <AlertTriangle size={12} /> {counts.unknown} of {commands.length} command
-                {commands.length === 1 ? '' : 's'} not found in the local catalog. Fill is disabled.
+                {commands.length === 1 ? '' : 's'} not found in the local catalog. Review before running;
+                Fill is disabled.
               </>
             ) : counts.documented || counts.deviceHelp ? (
               <>
@@ -460,7 +468,7 @@ function AssistantMessage({
             ) : (
               <>
                 <ShieldCheck size={12} /> All {counts.verified} command
-                {counts.verified === 1 ? '' : 's'} verified in the local ASA catalog.
+                {counts.verified === 1 ? '' : 's'} verified in the local device catalog.
               </>
             )}
           </div>
@@ -526,6 +534,8 @@ function UserMessage({ message }: { message: AiChatMessage }): React.JSX.Element
 
 const SUGGESTIONS = [
   'This device is dropping traffic. What should I check first?',
+  'Help me configure this device with a safe rollback plan.',
+  'Plan a configuration change and include verification commands.',
   'Give me a safe packet capture with the exact cleanup command.',
   'Review the recent terminal output and suggest the next diagnostic step.',
   'Which read-only commands prove where the problem is?'
@@ -632,10 +642,10 @@ export function AiChatPanel(): React.JSX.Element {
           <span className="ai-eyebrow">
             <Sparkles size={11} /> Optional
           </span>
-          <h3>AI troubleshooting partner</h3>
+          <h3>AI device engineer</h3>
           <p>
-            Ask questions, get a diagnosis path, and have commands placed in the prompt for review. The
-            assistant has no terminal access and can never run anything.
+            Ask for diagnosis, configuration help, or a safe change plan, and have commands placed in the
+            prompt for review. The assistant has no terminal access and can never run anything.
           </p>
           <ul className="ai-safety-list">
             <li>
@@ -691,7 +701,8 @@ export function AiChatPanel(): React.JSX.Element {
               setModal({
                 kind: 'command-browser',
                 query: draft.trim() || undefined,
-                sessionId
+                sessionId,
+                deviceTypeId: activeTypeId
               })
             }
             title="Search ASA commands or let the router choose one"
@@ -703,8 +714,8 @@ export function AiChatPanel(): React.JSX.Element {
             onClick={() => saveSettings({ aiStrictCommands: !settings.aiStrictCommands })}
             title={
               settings.aiStrictCommands
-                ? 'Strict command grounding: only exact curated catalog matches can be filled'
-                : 'Strict grounding is off; unverified commands are still Fill-disabled'
+                ? 'Strict ASA command grounding: only exact curated or device-help ASA commands can be shown'
+                : 'Strict grounding is off; unverified commands are shown with Fill disabled'
             }
           >
             <ShieldCheck size={11} /> Strict
@@ -946,7 +957,7 @@ export function AiChatPanel(): React.JSX.Element {
           rows={2}
           placeholder={
             canChat
-              ? 'Describe the symptom or ask what to check…'
+              ? 'Describe a symptom, a configuration goal, or ask what to check…'
               : localState?.phase === 'installing'
                 ? 'Installing Ollama…'
                 : localNeedsRuntime

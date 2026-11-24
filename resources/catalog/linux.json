@@ -1,0 +1,284 @@
+{
+  "id": "linux",
+  "name": "Linux",
+  "vendor": "Linux",
+  "family": "Endpoint",
+  "description": "Linux servers and workstations. iproute2, DNS, tcpdump, sockets, firewall, NetworkManager, TLS, logs, bonding, and drops.",
+  "aliases": ["ubuntu", "debian", "rhel", "red hat", "centos", "fedora", "linux server", "bash"],
+  "notes": [
+    "Most diagnostic commands need sudo or root.",
+    "NetworkManager, firewalld, nftables, and iptables vary by distribution. Use the command that matches the host.",
+    "Bounded tcpdump captures avoid leaving a process running."
+  ],
+  "categories": [
+    { "id": "connectivity", "name": "Connectivity", "description": "Addresses, routes, ping, trace, and port tests." },
+    { "id": "dns", "name": "DNS", "description": "Resolver configuration and queries." },
+    { "id": "capture", "name": "Packet capture", "description": "Bounded tcpdump captures." },
+    { "id": "ports", "name": "Ports & processes", "description": "Sockets and owning processes." },
+    { "id": "firewall", "name": "Firewall", "description": "nftables, iptables, and firewalld." },
+    { "id": "network", "name": "NetworkManager", "description": "Devices, connections, and profiles." },
+    { "id": "tls", "name": "TLS / HTTP", "description": "Certificates and HTTP checks." },
+    { "id": "logs", "name": "Logs", "description": "Journal, kernel, and NetworkManager logs." },
+    { "id": "system", "name": "System health", "description": "CPU, memory, disks, and failed services." },
+    { "id": "drops", "name": "Drops & performance", "description": "Interface errors, retransmits, and counters." },
+    { "id": "bonding", "name": "Bonding & bridges", "description": "Bonds, bridges, VLANs, and link aggregation." },
+    { "id": "dhcp", "name": "DHCP", "description": "Lease and address configuration." }
+  ],
+  "workflows": [
+    {
+      "id": "network-snapshot",
+      "title": "Network snapshot",
+      "category": "connectivity",
+      "summary": "Addresses, links, routes, and resolver state.",
+      "keywords": ["ip addr", "route", "link", "linux", "snapshot"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "ip -br address",
+        "ip -br link",
+        "ip route",
+        "resolvectl status"
+      ]
+    },
+    {
+      "id": "connectivity-check",
+      "title": "Connectivity and port test",
+      "category": "connectivity",
+      "summary": "Ping, trace, route lookup, and a TCP port check.",
+      "keywords": ["ping", "traceroute", "route", "port", "linux", "connectivity"],
+      "tags": ["connectivity"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "dst", "prompt": "Target host or IP", "type": "hostname", "required": true },
+        { "name": "port", "prompt": "TCP port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "ping -c 4 {dst}",
+        "traceroute {dst}",
+        "ip route get {dst}",
+        "ss -tnp",
+        { "command": "timeout 5 bash -c \"</dev/tcp/{dst}/{port}\"", "note": "Returns silently when the port opens, or times out when it is closed." }
+      ]
+    },
+    {
+      "id": "dns-check",
+      "title": "DNS resolution",
+      "category": "dns",
+      "summary": "Query a name, optionally through a specific resolver, and inspect resolver state.",
+      "keywords": ["dns", "dig", "resolvectl", "resolver", "linux"],
+      "tags": ["dns"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "name", "prompt": "Hostname to resolve", "type": "hostname", "required": true },
+        { "name": "dns_server", "prompt": "DNS server (optional)", "type": "hostname", "required": false }
+      ],
+      "steps": [
+        "dig +short {name}",
+        { "command": "dig @{dns_server} {name}", "when": { "var": "dns_server", "notEmpty": true } },
+        "resolvectl query {name}",
+        "resolvectl status"
+      ]
+    },
+    {
+      "id": "tcpdump-bounded",
+      "title": "Bounded packet capture",
+      "category": "capture",
+      "summary": "Capture 200 packets for a host pair to a pcap, then read it back.",
+      "keywords": ["tcpdump", "packet capture", "pcap", "linux", "host", "sniffer"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["sudo", "tcpdump installed"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "any" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "sudo timeout 30 tcpdump -i {iface} -nn host {src} and host {dst} -c 200 -w /tmp/tstcap.pcap",
+        "sudo tcpdump -nn -r /tmp/tstcap.pcap",
+        "ls -lh /tmp/tstcap.pcap"
+      ],
+      "notes": ["The capture stops after 200 packets or 30 seconds, whichever comes first.", "The pcap remains in /tmp for analysis."]
+    },
+    {
+      "id": "live-port-capture",
+      "title": "Live port capture",
+      "category": "capture",
+      "summary": "Watch a TCP port live for 15 seconds and print packet contents.",
+      "keywords": ["tcpdump", "live capture", "port", "linux", "ascii"],
+      "tags": ["capture", "application"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["sudo", "tcpdump installed"],
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "any" },
+        { "name": "port", "prompt": "TCP port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "sudo timeout 15 tcpdump -i {iface} -nn tcp port {port} -c 100 -A"
+      ]
+    },
+    {
+      "id": "port-listeners",
+      "title": "Port listeners and process",
+      "category": "ports",
+      "summary": "Find listening sockets and the process that owns a port.",
+      "keywords": ["ss", "port", "listener", "process", "linux"],
+      "tags": ["ports"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "port", "prompt": "Port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "sudo ss -tulpn",
+        "sudo ss -tulpn | grep :{port}",
+        "sudo lsof -nP -i :{port}"
+      ],
+      "notes": ["lsof may not be installed on minimal images. ss is part of iproute2."]
+    },
+    {
+      "id": "firewall-check",
+      "title": "Firewall state",
+      "category": "firewall",
+      "summary": "Inspect the host firewall using the tool present on the distribution.",
+      "keywords": ["firewall", "nftables", "iptables", "firewalld", "linux"],
+      "tags": ["firewall"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["sudo"],
+      "steps": [
+        "sudo nft list ruleset",
+        "sudo iptables -L -n -v",
+        "sudo firewall-cmd --list-all",
+        { "instruction": "Use the command that matches the host: nftables, iptables, or firewalld. Missing tools are expected." }
+      ]
+    },
+    {
+      "id": "network-manager",
+      "title": "NetworkManager devices and profiles",
+      "category": "network",
+      "summary": "Inspect device state, saved connections, and interface details.",
+      "keywords": ["networkmanager", "nmcli", "connection", "linux", "profile"],
+      "tags": ["networkmanager"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "iface", "prompt": "Interface (optional)", "type": "interface", "required": false }
+      ],
+      "steps": [
+        "nmcli device status",
+        "nmcli connection show",
+        { "command": "nmcli device show {iface}", "when": { "var": "iface", "notEmpty": true } },
+        "ip -d link show"
+      ]
+    },
+    {
+      "id": "tls-check",
+      "title": "TLS and HTTP endpoint",
+      "category": "tls",
+      "summary": "Test a TLS endpoint and print the certificate chain.",
+      "keywords": ["tls", "openssl", "certificate", "https", "curl", "linux"],
+      "tags": ["tls"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "host", "prompt": "Hostname", "type": "hostname", "required": true },
+        { "name": "port", "prompt": "TLS port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "openssl s_client -connect {host}:{port} -servername {host} -brief",
+        "curl -v --connect-timeout 10 https://{host}:{port}/"
+      ]
+    },
+    {
+      "id": "logs",
+      "title": "Network and kernel logs",
+      "category": "logs",
+      "summary": "Read recent NetworkManager, kernel, and system logs.",
+      "keywords": ["logs", "journalctl", "dmesg", "linux", "networkmanager"],
+      "tags": ["logs"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "journalctl -u NetworkManager --since \"1 hour ago\" --no-pager",
+        "journalctl -k --since \"30 min ago\" --no-pager",
+        "dmesg | tail -60",
+        "systemctl --failed"
+      ]
+    },
+    {
+      "id": "system-health",
+      "title": "System health",
+      "category": "system",
+      "summary": "Uptime, memory, disks, load, and failed services.",
+      "keywords": ["health", "memory", "disk", "load", "services", "linux"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "uptime",
+        "free -h",
+        "df -h",
+        "top -b -n1 | head -20",
+        "systemctl --failed"
+      ]
+    },
+    {
+      "id": "drops-and-errors",
+      "title": "Drops, errors, and retransmits",
+      "category": "drops",
+      "summary": "Read interface counters, protocol stats, and NIC statistics.",
+      "keywords": ["drops", "errors", "retransmit", "ethtool", "nstat", "linux"],
+      "tags": ["drops"],
+      "severity": "info",
+      "effect": "read",
+      "variables": [
+        { "name": "iface", "prompt": "Interface", "type": "interface", "default": "eth0" }
+      ],
+      "steps": [
+        "ip -s link show {iface}",
+        "nstat -az",
+        "ss -s",
+        "ethtool -S {iface}",
+        "ethtool {iface}"
+      ]
+    },
+    {
+      "id": "bonding-bridges",
+      "title": "Bonds, bridges, and VLANs",
+      "category": "bonding",
+      "summary": "Inspect link aggregation, bridge membership, and VLAN tagging.",
+      "keywords": ["bond", "bridge", "vlan", "lacp", "linux", "aggregation"],
+      "tags": ["bonding"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "cat /proc/net/bonding/*",
+        "bridge link",
+        "ip -d link show",
+        "ls /proc/net/vlan 2>/dev/null"
+      ]
+    },
+    {
+      "id": "dhcp-check",
+      "title": "DHCP and address state",
+      "category": "dhcp",
+      "summary": "Inspect addresses and DHCP-related NetworkManager events.",
+      "keywords": ["dhcp", "lease", "address", "linux", "networkmanager"],
+      "tags": ["dhcp"],
+      "severity": "info",
+      "effect": "read",
+      "steps": [
+        "ip -br address",
+        "resolvectl status",
+        "journalctl -u NetworkManager --since \"2 hours ago\" --no-pager | grep -i dhcp",
+        "ip route"
+      ]
+    }
+  ]
+}

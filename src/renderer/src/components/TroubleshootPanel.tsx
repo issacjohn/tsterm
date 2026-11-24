@@ -311,8 +311,8 @@ export function TroubleshootPanel(): React.JSX.Element {
           <div className="ts-empty-icon">
             <Wrench size={22} />
           </div>
-          <h3>Troubleshooting library</h3>
-          <p>Open an SSH or local session and TSTerm will load the right runbooks for that platform.</p>
+          <h3>Device runbook library</h3>
+          <p>Open an SSH or local session and TSTerm will load diagnosis and configuration runbooks for that platform.</p>
           <button className="btn btn-primary btn-sm" onClick={() => setModal({ kind: 'palette' })}>
             Open command palette
           </button>
@@ -330,7 +330,7 @@ export function TroubleshootPanel(): React.JSX.Element {
               {tab === 'assistant' ? <Bot size={11} /> : <Sparkles size={11} />}
               {tab === 'assistant' ? 'Assistant' : 'Runbooks'}
             </span>
-            <h2>Troubleshoot</h2>
+            <h2>Assist</h2>
           </div>
           {type ? (
             <button
@@ -347,7 +347,7 @@ export function TroubleshootPanel(): React.JSX.Element {
           ) : null}
         </div>
 
-        <div className="ts-mode-tabs" role="tablist" aria-label="Troubleshooting mode">
+        <div className="ts-mode-tabs" role="tablist" aria-label="Assist mode">
           <button
             role="tab"
             aria-selected={tab === 'runbooks'}
@@ -374,8 +374,8 @@ export function TroubleshootPanel(): React.JSX.Element {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="radius debugs, packet capture, bgp…"
-                aria-label="Search troubleshooting runbooks"
+                placeholder="radius debugs, packet capture, configure VLAN, bgp…"
+                aria-label="Search device runbooks"
                 data-autofocus
               />
               {query ? (

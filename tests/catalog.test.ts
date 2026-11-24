@@ -27,8 +27,24 @@ describe('bundled catalog', () => {
     expect(errors).toHaveLength(0)
   })
 
-  it('ships only the CISCO ASA pack for now', () => {
-    expect(bundle.types.map((type) => type.id)).toEqual(['cisco-asa'])
+  it('ships all validated device packs', () => {
+    expect(bundle.types.map((type) => type.id).sort()).toEqual(
+      [
+        'cisco-asa',
+        'cisco-9800',
+        'cisco-fmc',
+        'cisco-ftd',
+        'cisco-ios',
+        'cisco-meraki',
+        'cisco-nxos',
+        'cisco-wlc-aireos',
+        'generic-network',
+        'linux',
+        'macos',
+        'paloalto-panos',
+        'windows'
+      ].sort()
+    )
   })
 
   it('searches across names, keywords, and commands', () => {
@@ -69,7 +85,7 @@ describe('bundled catalog', () => {
     expect(asa.workflows.some((workflow) => workflow.id === 'license-status')).toBe(true)
     expect(asa.workflows.some((workflow) => workflow.id === 'tech-support')).toBe(true)
     const total = bundle.types.reduce((count, type) => count + type.workflows.length, 0)
-    expect(total).toBe(77)
+    expect(total).toBe(236)
   })
 
   it('uses the ASA capture syntax verified on the lab device', () => {

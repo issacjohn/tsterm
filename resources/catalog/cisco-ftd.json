@@ -1,0 +1,259 @@
+{
+  "id": "cisco-ftd",
+  "name": "Cisco FTD",
+  "vendor": "Cisco",
+  "family": "Firewall",
+  "description": "Cisco Firepower Threat Defense. FMC-managed firewall with a limited CLI, diagnostic LINA shell, Snort/IPS, and expert-mode Linux tools.",
+  "aliases": ["ftd", "firepower threat defense", "firepower", "fmc-managed firewall"],
+  "notes": [
+    "FTD is managed by FMC; many troubleshooting tasks start in the FMC UI.",
+    "The diagnostic CLI is reached with 'system support diagnostic-cli' and exposes ASA-style commands.",
+    "Expert mode is a Linux shell. Treat it as root-level access and use read-only commands."
+  ],
+  "categories": [
+    { "id": "capture", "name": "Packet capture", "description": "FMC packet capture and diagnostic CLI capture." },
+    { "id": "connectivity", "name": "Connectivity", "description": "Connections, routes, interfaces, and packet-tracer." },
+    { "id": "vpn", "name": "VPN / IPsec", "description": "AnyConnect and site-to-site VPN sessions." },
+    { "id": "aaa", "name": "AAA / RADIUS", "description": "AAA objects and authentication tests." },
+    { "id": "system", "name": "System & HA", "description": "Health, managers, failover, and Snort status." },
+    { "id": "diagnostics", "name": "Expert mode", "description": "Linux tools for disk, memory, processes, and logs." }
+  ],
+  "workflows": [
+    {
+      "id": "fmc-packet-capture",
+      "title": "Packet capture from FMC",
+      "category": "capture",
+      "summary": "Use FMC's packet capture workflow to capture traffic on an FTD data interface.",
+      "keywords": ["packet capture", "pcap", "fmc", "snort", "capture", "ftd"],
+      "tags": ["capture"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["FMC access", "device troubleshooting permission"],
+      "steps": [
+        { "instruction": "In FMC, open Devices > Device Management, edit the FTD, then Troubleshooting > Packet Capture." },
+        { "instruction": "Select the ingress interface and add a match for the source, destination, protocol, and port." },
+        { "instruction": "Start the capture, reproduce the flow, stop it, and download the pcap." },
+        { "instruction": "Open the pcap in Wireshark and compare the pre-Snort and post-Snort paths if drop reasons are shown." }
+      ],
+      "notes": [
+        "FMC captures are bounded by the file size and stop control, so no persistent debug is left on the device.",
+        "If the capture shows traffic but the connection is dropped, inspect Intrusion Events and the connection event in FMC."
+      ]
+    },
+    {
+      "id": "diagnostic-cli",
+      "title": "Open the diagnostic CLI and collect basics",
+      "category": "connectivity",
+      "summary": "Enter the LINA diagnostic CLI, collect version, interfaces, routes, and connection counts, then exit.",
+      "keywords": ["diagnostic-cli", "lina", "asa", "show version", "connections", "ftd cli"],
+      "tags": ["diagnostics"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FTD CLI login", "enable access"],
+      "steps": [
+        { "instruction": "From the FTD CLI, enter the diagnostic shell. This prompt may ask for the enable password." },
+        "system support diagnostic-cli",
+        "show version",
+        "show interface ip brief",
+        "show route",
+        "show conn count",
+        { "instruction": "Exit the diagnostic CLI when finished. On some releases this returns to FTD; on others it closes the SSH session." },
+        "exit"
+      ],
+      "notes": ["Record the FTD version first; command availability changes between releases."]
+    },
+    {
+      "id": "packet-tracer",
+      "title": "Packet-tracer — policy path",
+      "category": "connectivity",
+      "summary": "Simulate a TCP flow through the diagnostic CLI's ASA-style packet-tracer.",
+      "keywords": ["packet-tracer", "policy", "acl", "nat", "ftd", "flow"],
+      "tags": ["packet-tracer"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["diagnostic CLI"],
+      "variables": [
+        { "name": "iface", "prompt": "Ingress interface", "type": "interface", "default": "inside" },
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true },
+        { "name": "dst", "prompt": "Destination IP", "type": "ip", "required": true },
+        { "name": "dport", "prompt": "Destination port", "type": "port", "default": "443" }
+      ],
+      "steps": [
+        "system support diagnostic-cli",
+        "packet-tracer input {iface} tcp {src} 12345 {dst} {dport} detailed",
+        { "instruction": "Read the result from the bottom up. Exit the diagnostic CLI when finished." },
+        "exit"
+      ]
+    },
+    {
+      "id": "connections",
+      "title": "Connection and translation lookup",
+      "category": "connectivity",
+      "summary": "Inspect connection counts, a source's connections, and NAT state in the diagnostic CLI.",
+      "keywords": ["connections", "conn", "nat", "xlate", "ftd", "session"],
+      "tags": ["connections"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["diagnostic CLI"],
+      "variables": [
+        { "name": "src", "prompt": "Source IP", "type": "ip", "required": true }
+      ],
+      "steps": [
+        "system support diagnostic-cli",
+        "show conn count",
+        "show conn address {src}",
+        "show nat detail",
+        "show xlate | include {src}",
+        "exit"
+      ]
+    },
+    {
+      "id": "vpn-sessions",
+      "title": "VPN session inventory",
+      "category": "vpn",
+      "summary": "Inspect AnyConnect and site-to-site sessions, then confirm in FMC.",
+      "keywords": ["vpn", "anyconnect", "site-to-site", "ipsec", "session", "ftd"],
+      "tags": ["vpn"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["diagnostic CLI", "FMC VPN dashboard"],
+      "steps": [
+        "system support diagnostic-cli",
+        "show vpn-sessiondb summary",
+        "show vpn-sessiondb anyconnect",
+        "show vpn-sessiondb l2l",
+        "show crypto ikev2 sa",
+        "exit",
+        { "instruction": "In FMC, open Devices > VPN > Site-to-Site or Remote Access and compare the session state." }
+      ],
+      "notes": ["If the diagnostic CLI rejects a VPN command, use the FMC VPN dashboards for that release."]
+    },
+    {
+      "id": "routing-and-arp",
+      "title": "Routing, interfaces, and ARP",
+      "category": "connectivity",
+      "summary": "Collect interface, route, and ARP state from the diagnostic CLI.",
+      "keywords": ["routing", "route", "arp", "interface", "ftd"],
+      "tags": ["routing"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["diagnostic CLI"],
+      "steps": [
+        "system support diagnostic-cli",
+        "show interface ip brief",
+        "show route",
+        "show arp",
+        "exit"
+      ]
+    },
+    {
+      "id": "radius-aaa",
+      "title": "AAA / RADIUS troubleshooting",
+      "category": "aaa",
+      "summary": "Check AAA objects in FMC and test a RADIUS authentication profile.",
+      "keywords": ["radius", "aaa", "authentication", "fmc", "ftd", "identity"],
+      "tags": ["radius"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["FMC access"],
+      "steps": [
+        { "instruction": "In FMC, open Objects > AAA Server Groups and verify the RADIUS server, port, key, and timeout." },
+        { "instruction": "Open the identity policy or platform settings that use the AAA object and confirm the group is selected." },
+        { "instruction": "Use the FMC test button for the AAA object, then check the FTD connection event and the RADIUS server logs." },
+        { "instruction": "If the CLI is needed, enter the diagnostic CLI and check 'show aaa-server' with the group tag configured on the device." }
+      ],
+      "notes": ["RADIUS shared secrets are write-only in the UI; confirm them by re-entering if authentication fails."]
+    },
+    {
+      "id": "system-health",
+      "title": "FTD health and manager registration",
+      "category": "system",
+      "summary": "Version, CPU, memory, and FMC registration state.",
+      "keywords": ["health", "cpu", "memory", "managers", "sftunnel", "ftd"],
+      "tags": ["health"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FTD CLI"],
+      "steps": [
+        "show version",
+        "show managers",
+        "show cpu",
+        "show memory",
+        "show disk"
+      ],
+      "notes": ["If 'show disk' is not available in your release, use the expert-mode workflow."]
+    },
+    {
+      "id": "deployment-status",
+      "title": "FMC deployment and policy status",
+      "category": "system",
+      "summary": "Check pending deployments, task results, and the FTD's manager connection.",
+      "keywords": ["deployment", "policy", "fmc", "task", "managers", "sftunnel"],
+      "tags": ["deployment"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC access", "FTD CLI"],
+      "steps": [
+        { "instruction": "In FMC, open Devices > Device Management and check the deployment status and pending changes." },
+        { "instruction": "Open Tasks to read the last deploy task and any policy or validation errors." },
+        "show managers",
+        { "instruction": "If the device shows as pending or unreachable, open the device's Advanced settings and inspect the FMC registration." }
+      ]
+    },
+    {
+      "id": "expert-diagnostics",
+      "title": "Expert mode — disk, memory, and logs",
+      "category": "diagnostics",
+      "summary": "Use read-only Linux commands in expert mode to check disk, memory, processes, and logs.",
+      "keywords": ["expert", "linux", "disk", "memory", "process", "logs", "ftd"],
+      "tags": ["expert"],
+      "severity": "caution",
+      "effect": "read",
+      "requires": ["expert mode password"],
+      "steps": [
+        { "instruction": "From the FTD CLI, run 'expert' and enter the expert password." },
+        "sudo df -h",
+        "sudo free -m",
+        "top -b -n1 | head -30",
+        "sudo tail -50 /var/log/messages",
+        { "instruction": "Leave expert mode with 'exit'. Do not change services or files during an incident." }
+      ],
+      "notes": ["Expert mode is a Linux root shell. Stick to read-only commands."]
+    },
+    {
+      "id": "snort-events",
+      "title": "Snort / IPS event review",
+      "category": "system",
+      "summary": "Find intrusion events and determine whether Snort dropped the traffic.",
+      "keywords": ["snort", "ips", "intrusion", "drop", "fmc", "events"],
+      "tags": ["ips"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["FMC access"],
+      "steps": [
+        { "instruction": "In FMC, open Analysis > Intrusions > Events and filter by the source, destination, and time window." },
+        { "instruction": "Open the event and check the action: allowed, dropped, or blocked." },
+        { "instruction": "Compare the event with the connection event in Analysis > Connections > Events using the same flow." },
+        { "instruction": "Review the access control policy rule and the intrusion policy that produced the event." }
+      ],
+      "notes": ["If the connection is blocked before Snort, inspect the access control rule, NAT, and route."]
+    },
+    {
+      "id": "ha-failover",
+      "title": "FTD failover health",
+      "category": "system",
+      "summary": "Inspect failover state and history on an HA pair.",
+      "keywords": ["failover", "ha", "high availability", "ftd", "state"],
+      "tags": ["ha"],
+      "severity": "info",
+      "effect": "read",
+      "requires": ["diagnostic CLI"],
+      "steps": [
+        "system support diagnostic-cli",
+        "show failover",
+        "show failover history",
+        "exit"
+      ]
+    }
+  ]
+}

@@ -32,13 +32,22 @@ try {
 
   await page.waitForSelector('.app', { timeout: 30000 })
   await page.waitForTimeout(900)
+  await page.getByText('Local terminal', { exact: true }).first().click()
+  await page.waitForSelector('.connection-pill.connected', { timeout: 20000 })
+  await page.locator('.device-chip').click()
+  await page.waitForSelector('.device-search input')
+  await page.locator('.device-search input').fill('ASA')
+  await page.waitForTimeout(300)
+  await page.locator('.device-option', { hasText: 'Cisco ASA' }).first().click()
+  await page.getByRole('button', { name: /Use Cisco ASA/ }).click()
+  await page.waitForTimeout(500)
 
   const clicked = await app.evaluate(({ Menu }) => {
     const menu = Menu.getApplicationMenu()
     if (!menu) return false
     const find = (items) => {
       for (const item of items) {
-        if (item.label === 'ASA Command Reference') {
+        if (item.label === 'Command Reference') {
           item.click()
           item.menu?.closePopup?.()
           return true
@@ -49,7 +58,7 @@ try {
     }
     return find(menu.items)
   })
-  if (!clicked) throw new Error('ASA Command Reference menu item was not found.')
+  if (!clicked) throw new Error('Command Reference menu item was not found.')
 
   await page.waitForSelector('.command-browser-modal', { timeout: 5000 })
   await page.waitForSelector('.cmd-search input')
@@ -112,6 +121,51 @@ try {
     await page.screenshot({ path: path.join(shots, 'commands-03-hybrid.png'), animations: 'disabled' })
   }
 
+  await page.locator('.modal-close').click()
+  await page.waitForTimeout(200)
+
+  await page.locator('.device-chip').click()
+  await page.waitForSelector('.device-search input')
+  await page.locator('.device-search input').fill('Windows')
+  await page.waitForTimeout(300)
+  await page.locator('.device-option', { hasText: 'Windows' }).first().click()
+  await page.getByRole('button', { name: /Use Windows/ }).click()
+  await page.waitForTimeout(500)
+
+  const windowsScope = await app.evaluate(({ Menu }) => {
+    const menu = Menu.getApplicationMenu()
+    if (!menu) return false
+    const find = (items) => {
+      for (const item of items) {
+        if (item.label === 'Command Reference') {
+          item.click()
+          item.menu?.closePopup?.()
+          return true
+        }
+        if (item.submenu && find(item.submenu.items)) return true
+      }
+      return false
+    }
+    return find(menu.items)
+  })
+  if (!windowsScope) throw new Error('Command Reference menu item was not found for Windows.')
+
+  await page.waitForSelector('.command-browser-modal', { timeout: 5000 })
+  const windowsTitle = (await page.locator('.modal-heading h2').innerText()).trim()
+  await page.locator('.cmd-search input').fill('ipconfig')
+  await page.waitForSelector('.cmd-result', { timeout: 10000 })
+  await page.waitForTimeout(300)
+  const windowsResults = await page.locator('.cmd-result').allInnerTexts()
+  if (!/Windows Command Reference/i.test(windowsTitle)) {
+    throw new Error(`Command browser is not scoped to Windows: ${windowsTitle}`)
+  }
+  if (!windowsResults.some((text) => /ipconfig/i.test(text))) {
+    throw new Error('Windows command search did not return ipconfig.')
+  }
+  if (windowsResults.some((text) => /capture TSTCAP|ASA help|Cisco ASA/i.test(text))) {
+    throw new Error('ASA commands leaked into the Windows command browser.')
+  }
+  await page.screenshot({ path: path.join(shots, 'commands-06-scope-windows.png'), animations: 'disabled' })
   await page.locator('.modal-close').click()
   await page.waitForTimeout(200)
 

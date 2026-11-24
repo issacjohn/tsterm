@@ -114,7 +114,7 @@ export function CommandPalette(): React.JSX.Element {
       },
       {
         id: 'commands',
-        label: 'ASA command reference',
+        label: 'Device command reference',
         category: 'Library',
         keywords: 'cisco asa command catalog search bm25 vector hybrid router',
         icon: BookOpen,

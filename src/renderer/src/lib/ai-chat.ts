@@ -46,7 +46,8 @@ function findPane(state: AppStore, paneKey: string): PaneState | undefined {
 
 async function sanitizeHistory(
   messages: AiChatMessage[],
-  strict: boolean
+  strict: boolean,
+  deviceTypeId?: string
 ): Promise<AiChatMessage[]> {
   if (!strict) return messages
   const commands = new Set<string>()
@@ -73,7 +74,8 @@ async function sanitizeHistory(
   try {
     const result = await window.tsterm.commands.verify({
       commands: [...commands],
-      strict: true
+      strict: true,
+      deviceTypeId: deviceTypeId ?? '__none__'
     })
     const allowed = new Set(
       result.results
@@ -142,7 +144,8 @@ export async function sendAiMessage(
     state.setModal({
       kind: 'command-browser',
       query: prompt,
-      sessionId: pane.status === 'connected' ? pane.sessionId : undefined
+      sessionId: pane.status === 'connected' ? pane.sessionId : undefined,
+      deviceTypeId: pane.deviceTypeId || pane.session?.deviceType
     })
     state.notify({
       kind: 'info',
@@ -230,7 +233,8 @@ export async function sendAiMessage(
         limit: 6,
         useVector: true,
         includeReference: !state.settings.aiStrictCommands,
-        includeDeviceHelp: true
+        includeDeviceHelp: true,
+        deviceTypeId: typeId ?? '__none__'
       })
       commandHints = catalog.matches.map((match) => formatCommandHint(match.record))
     } catch {
@@ -239,7 +243,8 @@ export async function sendAiMessage(
 
     const requestMessages = await sanitizeHistory(
       nextMessages,
-      state.settings.aiStrictCommands
+      state.settings.aiStrictCommands && typeId === 'cisco-asa',
+      typeId
     )
     const result = await window.tsterm.ai.chat({
       requestId,

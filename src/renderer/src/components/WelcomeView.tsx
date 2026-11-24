@@ -33,7 +33,7 @@ export function WelcomeView(): React.JSX.Element {
       <div className="welcome-grid">
         <div className="welcome-copy">
           <span className="eyebrow">
-            <span className="eyebrow-dot" /> Network troubleshooting workspace
+            <span className="eyebrow-dot" /> Network operations workspace
           </span>
           <h1>
             Know the device.

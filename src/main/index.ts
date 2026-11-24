@@ -83,7 +83,7 @@ function buildMenu(): void {
         command('SFTP Browser', 'sftp', 'CmdOrCtrl+Shift+S'),
         command('Troubleshoot Panel', 'troubleshoot'),
         command('AI Assistant', 'ai-assistant'),
-        command('ASA Command Reference', 'commands', 'CmdOrCtrl+Shift+J'),
+        command('Command Reference', 'commands', 'CmdOrCtrl+Shift+J'),
         { type: 'separator' },
         command('Command Palette', 'command-palette', 'CmdOrCtrl+Shift+P'),
         command('Keyboard Shortcuts', 'shortcuts', 'F1')

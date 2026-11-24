@@ -34,20 +34,31 @@ No browser tabs full of half-remembered commands. No forgotten `undebug all` at 
 - Copy on select, right-click copy/paste, clickable links, Ctrl+F search, and font zoom.
 - SFTP browser, local port forwarding, jump hosts, session logs, known-host pinning, and encrypted credentials.
 - Session logging and a configurable keepalive.
-- An optional AI troubleshooting partner that can suggest and stage commands but can never execute them.
+- An optional AI device engineer that can suggest, explain, and stage commands but can never execute them.
 
 ### Device-aware runbooks
 
-The bundled catalog currently contains **Cisco ASA only: 77 runbooks across 14 categories**. The other
-packs are kept in `catalog-archive/` and are being validated one at a time before they return to the
-installer.
+The bundled catalog contains **13 validated device packs and 236 runbooks** across troubleshooting,
+configuration, and verification workflows.
 
-| Platform | What is covered |
+| Platform | Runbooks |
 | --- | --- |
-| Cisco ASA | **77 runbooks** — VPN, AnyConnect, IKEv1/IKEv2/IPsec, RADIUS/TACACS+/LDAP/User-ID, captures (host, subnet, ACL, ASP drop, decrypted), NAT, OSPF/EIGRP/BGP/multicast/IPv6, failover and clustering, licenses, logging, threat detection, and more |
+| Cisco ASA | 77 |
+| Cisco IOS / IOS-XE | 20 |
+| Cisco NX-OS | 14 |
+| Cisco FTD | 12 |
+| Cisco FMC | 9 |
+| Cisco 9800 | 8 |
+| Cisco Meraki | 8 |
+| Cisco AireOS WLC | 11 |
+| Palo Alto PAN-OS | 12 |
+| Linux | 14 |
+| Windows | 13 |
+| macOS | 14 |
+| Generic network | 4 |
 
 Every workflow can carry variables, required inputs, validation, instructions, notes, verification steps,
-and **cleanup commands**. Debug and capture workflows are not allowed to load without cleanup.
+and **cleanup or rollback commands**. Debug and capture workflows are not allowed to load without cleanup.
 
 ### Inline next-word predictions
 
@@ -57,12 +68,12 @@ As you type, TSTerm shows a dim completion after the cursor — never as bright 
 Predictions come from the active device pack, your snippets, and recent commands in the session.
 `Tab` accepts, `Esc` dismisses. Password prompts and full-screen programs are excluded.
 
-### Optional AI troubleshooting partner
+### Optional AI device engineer
 
 ![AI assistant](screenshots/21-ai-chat.png)
 
-TSTerm can hold a troubleshooting conversation with a **local model (Ollama or LM Studio)** or a provider
-you already subscribe to. It is **off by default** and is configured separately in
+TSTerm can hold a troubleshooting or configuration conversation with a **local model (Ollama or LM Studio)**
+or a provider you already subscribe to. It is **off by default** and is configured separately in
 **Settings → AI assistant**.
 
 Ollama users do not need to run `ollama pull`. When the assistant is enabled, TSTerm checks the local
@@ -75,9 +86,9 @@ recommended local model for network CLI work and for the command router; 1B–3B
 and TSTerm warns when one is selected. Device type and matching runbooks are always sent to the model;
 live terminal lines remain opt-in.
 
-The AI is **scoped to the active device pack**. An ASA session receives ASA runbooks only; other packs are
-excluded from the prompt. This build ships the ASA pack only, so a local terminal has no vendor runbooks
-until another pack is restored.
+The AI is **scoped to the active device pack**. Runbooks, command records, command verification, route
+candidates, references, and conversation history are filtered to that device type. A Windows session cannot
+see ASA commands, and an ASA session cannot see Cisco IOS or Linux commands. Switching tabs switches scope.
 
 Every terminal keeps its **own AI conversation**. Messages, drafts, errors, and an in-flight streamed answer
 belong to that terminal's tab. Switch to another device and the new tab starts with a clean thread; switch
@@ -86,38 +97,40 @@ are on another tab are delivered to the correct thread. Closing a tab clears tha
 Ollama reuses the loaded model across threads, so separate conversations do not reload or duplicate the
 model in VRAM.
 
-Assistant replies are **grounded in the local ASA catalog**. Every fenced, inline, and standalone command line is
-checked. In strict mode, only curated commands and device-help commands present on ASA 9.24(10) are rendered;
-anything else is removed before display and reported as hidden. Exact curated matches show **Verified in the
-local ASA catalog**, device-help matches show **Device help 9.24(10) — reference only**, Cisco documentation is
-hidden, and unknown commands are hidden. Copy and Snippet only use the verified lines. **Strict command
-grounding** is on by default and can be toggled in AI settings. Explicit command requests such as “what command
-shows interface errors?” switch the button from **Ask** to **Find command** and open the command browser with
-the question as the query instead of calling the model.
+Assistant replies are **grounded in the local device catalog**. Every fenced, inline, and standalone command
+line is checked. For ASA sessions, strict mode renders only curated commands and device-help commands present
+on ASA 9.24(10); anything else is removed before display and reported as hidden. For other device packs,
+unverified commands can remain visible for configuration help, but they are marked as unverified and cannot
+be filled. Exact curated matches show **Verified in the local device catalog**, device-help matches show
+**Device help 9.24(10) — reference only**, and unknown commands show their warning. Copy and Snippet only use
+the verified lines. **Strict command grounding** is on by default and can be toggled in AI settings. Explicit
+command requests such as “what command shows interface errors?” switch the button from **Ask** to
+**Find command** and open the command browser with the question as the query instead of calling the model.
 
-### ASA command reference and deterministic router
+### Device command reference and deterministic router
 
-![ASA command reference and router](screenshots/commands-04-ai-route.png)
+![Device command reference and router](screenshots/commands-04-ai-route.png)
 
-**Session → ASA Command Reference** (`Ctrl+Shift+J`) opens a searchable catalog of **27,499 ASA command
-records**:
+**Session → Command Reference** (`Ctrl+Shift+J`) opens a device-scoped, searchable catalog of **27,993
+command records**:
 
-- **514 fillable records**: 503 curated commands plus 11 live-verified capture records.
-- **24,475 device-help records** normalized from a read-only `?` crawl of ASA 9.24(10), including mode,
+- **1,008 fillable records**: 503 curated ASA commands, 11 live-verified ASA capture commands, and 494
+  commands generated from the other device packs.
+- **24,475 ASA device-help records** normalized from a read-only `?` crawl of ASA 9.24(10), including mode,
   category, parameter placeholders, and inferred risk. They are version-specific references, not fillable.
-- **2,510 Cisco documentation reference entries** imported from the official ASA A–H, I–R, S, and T–Z
+- **2,510 Cisco ASA documentation reference entries** imported from the official ASA A–H, I–R, S, and T–Z
   command reference.
 
-Search runs locally with BM25. The 514 fillable records can also be embedded once with Ollama and merged
-with reciprocal rank fusion; the device-help and documentation entries stay BM25-only. Reference entries show
-documented syntax, modes, risk, and a link to Cisco where available, but **Fill is disabled** because they are
-not parameterized yet.
+Search runs locally with BM25. The 1,008 fillable records can also be embedded once with Ollama and merged
+with reciprocal rank fusion; device-help and documentation entries stay BM25-only. The browser is scoped to
+the active session's device type. Reference entries show documented syntax, modes, risk, and a link to Cisco
+where available, but **Fill is disabled** because they are not parameterized yet.
 
 The **Let AI choose** action is different from free chat. The model receives only the top fillable
-candidate records and returns JSON with a candidate ID and extracted parameter values. TSTerm rejects any
-ID that was not retrieved, drops any value that is not present in your question or terminal output,
-validates each parameter, and renders the command from the curated template. The model never writes the
-command string, and documentation-only entries are never routed.
+candidates from the active device type and returns JSON with a candidate ID and extracted parameter values.
+TSTerm rejects any ID that was not retrieved, drops any value that is not present in your question or
+terminal output, validates each parameter, and renders the command from the curated template. The model
+never writes the command string, and documentation-only entries are never routed.
 
 Every record is classified as read-only, diagnostic, mutating, or destructive. Diagnostic records show
 their cleanup, and destructive records require typing `CONFIRM` before **Fill** is enabled. Fill writes
@@ -371,7 +384,7 @@ npm run test:ai-local
 # Checks the missing-runtime UI offers Install Ollama instead of a misleading Download button
 npm run test:ai-runtime
 
-# Verifies ASA-only runbook scope and imported reference retrieval
+# Verifies device-scoped runbook scope and imported reference retrieval
 npm run test:ai-reference
 
 # Verifies separate per-terminal conversations, drafts, and background completion

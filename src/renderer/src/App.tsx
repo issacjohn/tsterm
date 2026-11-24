@@ -320,7 +320,11 @@ function handleMenuCommand(command: MenuCommand): void {
       }
       break
     case 'commands':
-      state.setModal({ kind: 'command-browser' })
+      state.setModal({
+        kind: 'command-browser',
+        deviceTypeId:
+          activePane(state)?.deviceTypeId || activePane(state)?.session?.deviceType
+      })
       break
     case 'sftp': {
       const pane = activePane(state)

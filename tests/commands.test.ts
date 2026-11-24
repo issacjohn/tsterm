@@ -111,7 +111,7 @@ describe('command catalog', () => {
     expect(result.results[0].recordId).toBeTruthy()
     expect(result.results[1].recordId).toContain('capture-host')
     expect(result.results[2].reason).toMatch(/strict/i)
-    expect(result.results[3].reason).toMatch(/not in the local ASA catalog/i)
+    expect(result.results[3].reason).toMatch(/not in the local command catalog for this device/i)
 
     const casing = commands.verifyCommands({ commands: ['SHOW VERSION'] })
     expect(casing.results[0].status).toBe('verified')
@@ -183,6 +183,45 @@ describe('command catalog', () => {
       'verified'
     ])
     expect(result.results[0].recordId).toContain('asa.live.capture-any-any')
+  })
+
+  it('keeps device command catalogs isolated', async () => {
+    const commands = service()
+    const windows = await commands.search({
+      query: 'ipconfig',
+      limit: 10,
+      useVector: false,
+      deviceTypeId: 'windows'
+    })
+    expect(windows.matches.length).toBeGreaterThan(0)
+    expect(windows.matches.every((match) => match.record.deviceTypeId === 'windows')).toBe(true)
+
+    const asa = await commands.search({
+      query: 'ipconfig',
+      limit: 10,
+      useVector: false,
+      deviceTypeId: 'cisco-asa'
+    })
+    expect(asa.matches.every((match) => match.record.deviceTypeId === 'cisco-asa')).toBe(true)
+
+    const windowsVerify = commands.verifyCommands({
+      commands: ['ipconfig /all'],
+      deviceTypeId: 'windows'
+    })
+    expect(windowsVerify.results[0].status).toBe('verified')
+
+    const asaVerify = commands.verifyCommands({
+      commands: ['ipconfig /all', 'show version'],
+      deviceTypeId: 'cisco-asa'
+    })
+    expect(asaVerify.results[0].status).toBe('unknown')
+    expect(asaVerify.results[1].status).toBe('verified')
+
+    const unscoped = commands.verifyCommands({
+      commands: ['show version'],
+      deviceTypeId: 'windows'
+    })
+    expect(unscoped.results[0].status).toBe('unknown')
   })
 
   it('finds capture commands for a natural-language symptom', async () => {
@@ -281,7 +320,8 @@ describe('command catalog', () => {
   it('reports candidates when AI is not configured', async () => {
     const commands = service()
     const result = await commands.route({
-      query: 'capture traffic from 10.1.1.1 to 8.8.8.8 on the outside interface'
+      query: 'capture traffic from 10.1.1.1 to 8.8.8.8 on the outside interface',
+      deviceTypeId: 'cisco-asa'
     })
     expect(result.ok).toBe(false)
     expect(result.candidates.length).toBeGreaterThan(0)
@@ -387,7 +427,7 @@ describe('AI router contract', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await commands.route({ query, profileId: 'local-ollama' })
+    const result = await commands.route({ query, profileId: 'local-ollama', deviceTypeId: 'cisco-asa' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(result.ok).toBe(true)
     expect(result.selected?.id).toBe(candidate.id)
@@ -430,7 +470,7 @@ describe('AI router contract', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await commands.route({ query, profileId: 'local-ollama' })
+    const result = await commands.route({ query, profileId: 'local-ollama', deviceTypeId: 'cisco-asa' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result.ok).toBe(true)
     expect(result.selected?.id).toBe(candidate.id)
@@ -453,7 +493,7 @@ describe('AI router contract', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await commands.route({ query, profileId: 'local-ollama' })
+    const result = await commands.route({ query, profileId: 'local-ollama', deviceTypeId: 'cisco-asa' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/not in the candidate list/i)
@@ -480,7 +520,7 @@ describe('AI router contract', () => {
       )
     )
 
-    const result = await commands.route({ query, profileId: 'local-ollama' })
+    const result = await commands.route({ query, profileId: 'local-ollama', deviceTypeId: 'cisco-asa' })
     expect(result.ok).toBe(true)
     expect(result.rendered).toBeUndefined()
     expect(result.missing).toContain('src')

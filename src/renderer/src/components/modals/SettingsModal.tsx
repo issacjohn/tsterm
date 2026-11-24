@@ -1098,7 +1098,7 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                     checked={settings.aiStrictCommands}
                     onChange={(value) => update({ aiStrictCommands: value })}
                     label="Strict command grounding"
-                    description="Only commands with an exact curated catalog match get one-click Fill. Documentation-only commands and unknown commands are clearly marked and cannot be filled."
+                    description="For ASA, hide commands that are not in the curated or device-help catalog. Other device packs show unverified commands for review with Fill disabled. Only exact curated matches can be filled."
                   />
                   <SettingToggle
                     checked={settings.aiAutoPullLocalModels}

@@ -61,7 +61,7 @@ export type ModalState =
   | { kind: 'known-hosts' }
   | { kind: 'palette' }
   | { kind: 'update'; info: UpdateInfo; manual: boolean }
-  | { kind: 'command-browser'; query?: string; sessionId?: string }
+  | { kind: 'command-browser'; query?: string; sessionId?: string; deviceTypeId?: string }
   | {
       kind: 'runbook'
       typeId: string

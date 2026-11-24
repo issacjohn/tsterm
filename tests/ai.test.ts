@@ -636,12 +636,25 @@ describe('AI system prompt', () => {
     expect(prompt).toContain('MIDDLE')
   })
 
-  it('does not inject the ASA command index into other platforms', () => {
+  it('supports configuration requests without dropping safety rules', () => {
+    const prompt = buildSystemPrompt({
+      ...baseRequest,
+      includeContext: false,
+      context: { deviceTypeName: 'Windows', vendor: 'Microsoft', family: 'Windows' }
+    })
+    expect(prompt).toContain('configuration or change')
+    expect(prompt).toContain('rollback')
+    expect(prompt).toContain('You cannot execute commands')
+  })
+
+  it('does not inject ASA syntax into other platforms', () => {
     const prompt = buildSystemPrompt({
       ...baseRequest,
       context: { deviceTypeName: 'Windows', vendor: 'Microsoft', family: 'Windows' }
     })
     expect(prompt).not.toContain('Top-level ASA commands')
+    expect(prompt).not.toContain('capture TSTCAP')
+    expect(prompt).toContain('configuration')
   })
 
   it('includes user-imported reference excerpts as reference data', () => {
@@ -903,7 +916,7 @@ describe('follow-up retrieval and thinking tags', () => {
         commandHints: ['### show crypto ikev2 sa\nRisk: read_only · Mode: privileged EXEC']
       }
     })
-    expect(prompt).toContain('Retrieved ASA command records')
+    expect(prompt).toContain('Retrieved command records')
     expect(prompt).toContain('show crypto ikev2 sa')
   })
 })

@@ -96,6 +96,12 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   const notify = useAppStore((state) => state.notify)
   const setModal = useAppStore((state) => state.setModal)
   const browser = modal?.kind === 'command-browser' ? modal : null
+  const deviceTypeId =
+    browser?.deviceTypeId || pane?.deviceTypeId || pane?.session?.deviceType
+  const commandDeviceType = deviceTypeId || '__none__'
+  const deviceType = useAppStore((state) =>
+    state.catalog.types.find((type) => type.id === deviceTypeId)
+  )
 
   const [query, setQuery] = useState(browser?.query ?? '')
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
@@ -144,7 +150,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
         notify({
           kind: 'info',
           title: 'Preparing hybrid command search',
-          message: 'Checking the local ASA embedding model…',
+          message: 'Checking the local embedding model…',
           duration: 5000
         })
         void window.tsterm.commands
@@ -156,7 +162,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
               notify({
                 kind: 'success',
                 title: 'Hybrid command search ready',
-                message: `${next.vectorCount}/${next.vectorTargetCount} fillable ASA commands embedded.`,
+                message: `${next.vectorCount}/${next.vectorTargetCount} fillable commands embedded.`,
                 duration: 6000
               })
             } else if (next.vectorError) {
@@ -192,6 +198,13 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   }, [query])
 
   useEffect(() => {
+    setResult(null)
+    setSelectedId(null)
+    setValues({})
+    setRoute(null)
+  }, [commandDeviceType])
+
+  useEffect(() => {
     const term = query.trim()
     if (!term) {
       setResult(null)
@@ -206,6 +219,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
           query: term,
           limit: 20,
           risk: riskFilter === 'all' ? undefined : riskFilter,
+          deviceTypeId: commandDeviceType,
           useVector: true
         })
         .then((next) => {
@@ -224,7 +238,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [query, riskFilter, status?.vectorReady])
+  }, [query, riskFilter, status?.vectorReady, commandDeviceType])
 
   const records = useMemo(() => {
     const list = result?.matches.map((match) => match.record) ?? []
@@ -334,7 +348,8 @@ export function CommandBrowserModal(): React.JSX.Element | null {
       const next = await window.tsterm.commands.route({
         query: term,
         terminalTail: snapshot.tail,
-        profileId: profile?.id
+        profileId: profile?.id,
+        deviceTypeId: commandDeviceType
       })
       setRoute(next)
       if (next.ok && next.selected && next.confidence !== 'low') {
@@ -405,8 +420,8 @@ export function CommandBrowserModal(): React.JSX.Element | null {
 
   return (
     <Modal
-      title="ASA Command Reference"
-      description="Structured ASA commands, BM25 + vector retrieval, and a deterministic AI router. Fill only — never Enter."
+      title={deviceType ? `${deviceType.name} Command Reference` : 'Command Reference'}
+      description="Device-scoped command browser, BM25 + vector retrieval, and a deterministic AI router. Fill only - never Enter."
       icon={<Layers size={20} />}
       size="xl"
       className="command-browser-modal"
@@ -447,7 +462,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
             data-autofocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search a command, keyword, symptom, or %ASA-4-106023…"
+            placeholder="Search a command, keyword, symptom, or syslog ID…"
             spellCheck={false}
           />
           {searching ? <Loader2 size={13} className="spin" /> : null}
@@ -487,12 +502,13 @@ export function CommandBrowserModal(): React.JSX.Element | null {
           ))}
         </div>
         <div className="cmd-search-meta">
-          {result
-            ? `${result.matches.length} shown · ${result.total} eligible${
-                vectorReady ? ` · ${result.vectorReady ? 'hybrid' : 'BM25'}`
-                  : ''
-              }`
-            : `Type to search ${status?.total ?? 0} ASA command records`}
+          {!deviceType
+            ? 'Select a device type in the session toolbar to scope commands.'
+            : result
+              ? `${result.matches.length} shown · ${result.total} eligible${
+                  vectorReady ? ` · ${result.vectorReady ? 'hybrid' : 'BM25'}` : ''
+                }`
+              : `Type to search ${deviceType.name} command records`}
         </div>
       </div>
 
@@ -608,8 +624,8 @@ export function CommandBrowserModal(): React.JSX.Element | null {
                 or an exact token like <code>%ASA-4-106023</code>.
               </p>
               <span>
-                {status?.total ?? 0} records: fillable runbooks, complete examples, device help, and the
-                Cisco documentation reference.
+                {status?.total ?? 0} records across device packs: fillable runbooks, complete examples, and
+                imported references.
               </span>
             </div>
           ) : searching && !result ? (
