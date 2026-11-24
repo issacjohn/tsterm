@@ -8,6 +8,7 @@ import type {
   ChooseSaveOptions,
   CommandRouteRequest,
   CommandSearchRequest,
+  CommandVerifyRequest,
   ConnectLocalOptions,
   ConnectSshOptions,
   HostInput,
@@ -407,6 +408,12 @@ export function registerIpc(services: IpcServices): void {
 
   ipcMain.handle('commands:status', () => commands.status())
   ipcMain.handle('commands:reload', () => commands.reload())
+  ipcMain.handle('commands:verify', (_event, request?: CommandVerifyRequest) => {
+    return commands.verifyCommands({
+      commands: Array.isArray(request?.commands) ? request.commands.slice(0, 50) : [],
+      strict: request?.strict === true
+    })
+  })
   ipcMain.handle('commands:search', (_event, request?: CommandSearchRequest) => {
     const input = request && typeof request === 'object' ? request : { query: '' }
     const risk =

@@ -43,6 +43,20 @@
 - Literal `<think>` / `<thinking>` blocks are removed from streamed and final text, including tags split
   across chunks.
 
+## Grounded assistant commands
+
+- Every fenced and inline command in an Assistant reply is checked against the local catalog.
+- Commands show **verified**, **documented reference**, or **not in the local ASA catalog** instead of
+  looking equally trustworthy.
+- One-click **Fill** is enabled only for exact curated matches; documented-only and unknown commands stay
+  visible but cannot be filled.
+- **Strict command grounding** is on by default and can be toggled in AI settings. It excludes Cisco
+  reference entries from free-chat hints and forbids presenting documentation-only syntax as runnable.
+- Explicit command requests switch the composer button to **Find command** and open the deterministic
+  command browser with the question as the query instead of calling the free-chat model.
+- Fail-closed behavior: if grounding cannot be checked, the command is treated as unknown and cannot be
+  filled.
+
 ## Safety
 
 - Four risk classes: read-only, diagnostic, mutating, destructive.
@@ -50,6 +64,7 @@
 - Destructive records require typing `CONFIRM` before Fill.
 - Top-level commands are labeled incomplete and are de-prioritized for symptom questions.
 - Router is disabled when the AI assistant is off.
+- Assistant Fill is gated on an exact, verified catalog match.
 - Fill still writes one line and never presses Enter.
 
 ## Data and documentation

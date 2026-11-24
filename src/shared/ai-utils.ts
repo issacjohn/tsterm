@@ -16,6 +16,23 @@ export function extractInlineCommands(text: string): string[] {
     .filter((command) => looksLikeCommand(command))
 }
 
+const COMMAND_REQUEST_PATTERNS = [
+  /^(?:what|which|find|give|show|list|suggest|recommend)\b.{0,80}\b(?:commands?|cli|syntax)\b/i,
+  /^(?:i\s+)?(?:need|want|looking for)\b.{0,60}\b(?:commands?|cli|syntax)\b/i,
+  /\b(?:commands?|cli|syntax)\s+(?:to|for|that)\b/i
+]
+
+/**
+ * Detect an explicit request for a command or syntax. These are answered by
+ * the local catalog browser instead of free-form model output.
+ */
+export function isCommandRequest(value: string): boolean {
+  const text = value.trim()
+  if (!text || text.length > 400) return false
+  if (/[\r\n`]/.test(text)) return false
+  return COMMAND_REQUEST_PATTERNS.some((pattern) => pattern.test(text))
+}
+
 export function isSmallModelName(value: string): boolean {
   const model = value.trim().toLowerCase().replace(/:latest$/, '')
   if (!model) return false

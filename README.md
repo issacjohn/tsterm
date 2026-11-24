@@ -86,6 +86,14 @@ are on another tab are delivered to the correct thread. Closing a tab clears tha
 Ollama reuses the loaded model across threads, so separate conversations do not reload or duplicate the
 model in VRAM.
 
+Assistant replies are **grounded in the local ASA catalog**. Every fenced and inline command is checked
+before it can be filled: exact curated matches show **Verified in the local ASA catalog**, documentation-only
+syntax is marked but cannot be filled, and anything else is labeled **Not in the local ASA catalog — verify
+on the device**. The summary above each answer reports how many commands were verified. **Strict command
+grounding** is on by default and can be toggled in AI settings. Explicit command requests such as “what
+command shows interface errors?” switch the button from **Ask** to **Find command** and open the command
+browser with the question as the query instead of calling the model.
+
 ### ASA command reference and deterministic router
 
 ![ASA command reference and router](screenshots/commands-04-ai-route.png)

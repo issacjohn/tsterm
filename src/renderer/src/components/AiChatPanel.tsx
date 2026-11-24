@@ -20,8 +20,12 @@ import {
   TerminalSquare,
   X
 } from 'lucide-react'
-import type { AiChatMessage, AiProfile } from '@shared/types'
-import { isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
+import type {
+  AiChatMessage,
+  AiProfile,
+  CommandVerification
+} from '@shared/types'
+import { isCommandRequest, isLoopbackUrl, isSmallModelName } from '@shared/ai-utils'
 import { activePane, EMPTY_AI_THREAD, useAppStore } from '../store'
 import { saveSettings } from '../lib/session-actions'
 import { cancelAiMessage, clearAiThread, sendAiMessage } from '../lib/ai-chat'
@@ -90,12 +94,58 @@ function useFillCommand(): (command: string) => void {
   }
 }
 
+function GroundingStatus({
+  verification,
+  pending
+}: {
+  verification?: CommandVerification
+  pending: boolean
+}): React.JSX.Element {
+  if (pending) {
+    return (
+      <span className="ai-grounding pending">
+        <Loader2 size={10} className="spin" /> Checking the local catalog…
+      </span>
+    )
+  }
+  if (!verification) {
+    return (
+      <span className="ai-grounding unknown">
+        <AlertTriangle size={10} /> Not checked. Verify it on the device.
+      </span>
+    )
+  }
+  if (verification.status === 'verified') {
+    return (
+      <span className="ai-grounding verified">
+        <ShieldCheck size={10} /> Verified in the local ASA catalog
+      </span>
+    )
+  }
+  if (verification.status === 'documented') {
+    return (
+      <span className="ai-grounding documented">
+        <BookOpen size={10} /> Documented reference, not verified — Fill disabled
+      </span>
+    )
+  }
+  return (
+    <span className="ai-grounding unknown">
+      <AlertTriangle size={10} /> Not in the local ASA catalog — verify on the device
+    </span>
+  )
+}
+
 function CommandBlock({
   block,
-  stateChanging
+  stateChanging,
+  verifications,
+  pending
 }: {
   block: AiBlock
   stateChanging: boolean
+  verifications: Record<string, CommandVerification>
+  pending: boolean
 }): React.JSX.Element {
   const pane = useAppStore(activePane)
   const notify = useAppStore((state) => state.notify)
@@ -141,19 +191,35 @@ function CommandBlock({
       </div>
       <div className="ai-code-body">
         {block.commands.length ? (
-          block.commands.map((command, index) => (
-            <div className="ai-command-line" key={`${command}-${index}`}>
-              <code>{command}</code>
-              <button
-                className="ai-fill-btn"
-                disabled={!sessionId}
-                onClick={() => fill(command)}
-                title={sessionId ? 'Put this line in the prompt without pressing Enter' : 'Connect a session first'}
-              >
-                <CornerDownLeft size={12} /> Fill
-              </button>
-            </div>
-          ))
+          block.commands.map((command, index) => {
+            const verification = verifications[command]
+            const verified = verification?.status === 'verified' && !pending
+            const fillTitle = !sessionId
+              ? 'Connect a session first'
+              : pending
+                ? 'Checking this command against the local catalog…'
+                : verification?.status === 'verified'
+                  ? 'Put this line in the prompt without pressing Enter'
+                  : verification?.status === 'documented'
+                    ? 'Documented reference only. Choose a curated command in the command browser to enable Fill.'
+                    : 'Not in the local ASA catalog. Verify it on the device first.'
+            return (
+              <div className="ai-command-wrap" key={`${command}-${index}`}>
+                <div className="ai-command-line">
+                  <code>{command}</code>
+                  <button
+                    className="ai-fill-btn"
+                    disabled={!sessionId || !verified}
+                    onClick={() => fill(command)}
+                    title={fillTitle}
+                  >
+                    <CornerDownLeft size={12} /> Fill
+                  </button>
+                </div>
+                <GroundingStatus verification={verification} pending={pending} />
+              </div>
+            )
+          })
         ) : (
           <pre>{block.code}</pre>
         )}
@@ -166,16 +232,33 @@ function CommandBlock({
   )
 }
 
-function InlineCommand({ code }: { code: string }): React.JSX.Element {
+function InlineCommand({
+  code,
+  verification,
+  pending
+}: {
+  code: string
+  verification?: CommandVerification
+  pending: boolean
+}): React.JSX.Element {
   const pane = useAppStore(activePane)
   const fill = useFillCommand()
   const connected = pane?.status === 'connected' && Boolean(pane.sessionId)
+  const verified = verification?.status === 'verified' && !pending
   return (
     <button
-      className="ai-inline-command"
-      disabled={!connected}
+      className={cx('ai-inline-command', verification?.status)}
+      disabled={!connected || !verified}
       onClick={() => fill(code)}
-      title={connected ? 'Place this command in the prompt without pressing Enter' : 'Connect a session first'}
+      title={
+        !connected
+          ? 'Connect a session first'
+          : pending
+            ? 'Checking this command against the local catalog…'
+            : verified
+              ? 'Place this command in the prompt without pressing Enter'
+              : 'Unverified command. Use the command browser to choose a curated command.'
+      }
     >
       <code>{code}</code>
       <CornerDownLeft size={9} />
@@ -183,7 +266,15 @@ function InlineCommand({ code }: { code: string }): React.JSX.Element {
   )
 }
 
-function InlineText({ content }: { content: string }): React.JSX.Element {
+function InlineText({
+  content,
+  verifications,
+  pending
+}: {
+  content: string
+  verifications: Record<string, CommandVerification>
+  pending: boolean
+}): React.JSX.Element {
   const parts = content.split(/(`[^`\n]+`)/g)
   return (
     <div className="ai-text">
@@ -191,7 +282,14 @@ function InlineText({ content }: { content: string }): React.JSX.Element {
         if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
           const code = part.slice(1, -1).trim()
           if (looksLikeCommand(code)) {
-            return <InlineCommand code={code} key={`inline-${index}`} />
+            return (
+              <InlineCommand
+                code={code}
+                verification={verifications[code]}
+                pending={pending}
+                key={`inline-${index}`}
+              />
+            )
           }
           return <code key={`code-${index}`}>{code}</code>
         }
@@ -214,6 +312,59 @@ function AssistantMessage({
       ? segment.block.commands
       : extractInlineCommands(segment.content)
   )
+  const settings = useAppStore((state) => state.settings)
+  const [verifications, setVerifications] = useState<Record<string, CommandVerification>>({})
+  const [checked, setChecked] = useState(false)
+
+  useEffect(() => {
+    const unique = [...new Set(commands)].filter(Boolean)
+    setVerifications({})
+    setChecked(false)
+    if (streaming || unique.length === 0) return
+    let cancelled = false
+    void window.tsterm.commands
+      .verify({ commands: unique, strict: settings.aiStrictCommands })
+      .then((result) => {
+        if (cancelled) return
+        setVerifications(
+          Object.fromEntries(result.results.map((verification) => [verification.command, verification]))
+        )
+        setChecked(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setVerifications(
+          Object.fromEntries(
+            unique.map((command) => [
+              command,
+              {
+                command,
+                status: 'unknown' as const,
+                reason: 'The local catalog check failed. Verify it on the device.'
+              }
+            ])
+          )
+        )
+        setChecked(true)
+      })
+    return () => {
+      cancelled = true
+    }
+    // Verification is keyed to the completed answer text and ground mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.content, streaming, settings.aiStrictCommands])
+
+  const pending = streaming || (commands.length > 0 && !checked)
+  const counts = commands.reduce(
+    (state, command) => {
+      const status = verifications[command]?.status
+      if (status === 'verified') state.verified += 1
+      else if (status === 'documented') state.documented += 1
+      else if (status === 'unknown') state.unknown += 1
+      return state
+    },
+    { verified: 0, documented: 0, unknown: 0 }
+  )
   const { startsDebugOrCapture, hasCleanup, captureWarnings } = analyzeAiCommands(commands)
 
   return (
@@ -224,6 +375,42 @@ function AssistantMessage({
           <span>Assistant</span>
           <span className="ai-not-executed">suggestions only</span>
         </div>
+        {commands.length ? (
+          <div
+            className={cx(
+              'ai-grounding-summary',
+              pending
+                ? 'pending'
+                : counts.unknown
+                  ? 'unknown'
+                  : counts.documented
+                    ? 'documented'
+                    : 'verified'
+            )}
+          >
+            {pending ? (
+              <>
+                <Loader2 size={12} className="spin" /> Checking {commands.length} command
+                {commands.length === 1 ? '' : 's'} against the local catalog…
+              </>
+            ) : counts.unknown ? (
+              <>
+                <AlertTriangle size={12} /> {counts.unknown} of {commands.length} command
+                {commands.length === 1 ? '' : 's'} not found in the local catalog. Fill is disabled.
+              </>
+            ) : counts.documented ? (
+              <>
+                <BookOpen size={12} /> {counts.documented} documented reference command
+                {counts.documented === 1 ? '' : 's'}; Fill is disabled until an exact catalog match.
+              </>
+            ) : (
+              <>
+                <ShieldCheck size={12} /> All {counts.verified} command
+                {counts.verified === 1 ? '' : 's'} verified in the local ASA catalog.
+              </>
+            )}
+          </div>
+        ) : null}
         {startsDebugOrCapture ? (
           <div className={cx('ai-cleanup-check', hasCleanup ? 'ok' : 'warn')}>
             {hasCleanup ? <Check size={12} /> : <ShieldCheck size={12} />}
@@ -247,11 +434,18 @@ function AssistantMessage({
         ) : null}
         {segments.map((segment, index) =>
           segment.kind === 'text' ? (
-            <InlineText content={segment.content} key={`text-${index}`} />
+            <InlineText
+              content={segment.content}
+              verifications={verifications}
+              pending={pending}
+              key={`text-${index}`}
+            />
           ) : (
             <CommandBlock
               block={segment.block}
               stateChanging={analyzeAiCommands(segment.block.commands).stateChanging}
+              verifications={verifications}
+              pending={pending}
               key={`code-${index}`}
             />
           )
@@ -449,6 +643,17 @@ export function AiChatPanel(): React.JSX.Element {
             title="Search ASA commands or let the router choose one"
           >
             <Search size={11} /> Commands
+          </button>
+          <button
+            className={cx('ai-context-chip', settings.aiStrictCommands && 'on')}
+            onClick={() => saveSettings({ aiStrictCommands: !settings.aiStrictCommands })}
+            title={
+              settings.aiStrictCommands
+                ? 'Strict command grounding: only exact curated catalog matches can be filled'
+                : 'Strict grounding is off; unverified commands are still Fill-disabled'
+            }
+          >
+            <ShieldCheck size={11} /> Strict
           </button>
           {referenceCount > 0 ? (
             <button
@@ -714,8 +919,14 @@ export function AiChatPanel(): React.JSX.Element {
             className="btn btn-primary btn-sm ai-send"
             onClick={() => void send()}
             disabled={!canChat || !draft.trim()}
+            title={
+              isCommandRequest(draft)
+                ? 'Opens the command browser with this query; commands come from the local catalog'
+                : 'Ask the assistant'
+            }
           >
-            <Send size={14} /> Ask
+            {isCommandRequest(draft) ? <Search size={14} /> : <Send size={14} />}
+            {isCommandRequest(draft) ? 'Find command' : 'Ask'}
           </button>
         )}
       </div>

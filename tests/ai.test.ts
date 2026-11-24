@@ -10,6 +10,7 @@ import {
   buildRetrievalQuery,
   extractCommands,
   extractInlineCommands,
+  isCommandRequest,
   isLoopbackUrl,
   isSmallModelName,
   looksLikeCommand,
@@ -564,6 +565,26 @@ describe('AI system prompt', () => {
     expect(prompt).toContain('Never mention commands from another platform')
   })
 
+  it('adds the strict grounding directive only in strict mode', () => {
+    const context = {
+      deviceTypeName: 'Cisco ASA',
+      vendor: 'Cisco',
+      family: 'ASA'
+    }
+    const strict = buildSystemPrompt({
+      ...baseRequest,
+      includeContext: true,
+      context: { ...context, strictCommands: true }
+    })
+    expect(strict).toContain('Strict command grounding is on')
+    const relaxed = buildSystemPrompt({
+      ...baseRequest,
+      includeContext: true,
+      context: { ...context, strictCommands: false }
+    })
+    expect(relaxed).not.toContain('Strict command grounding is on')
+  })
+
   it('does not inject the ASA command index into other platforms', () => {
     const prompt = buildSystemPrompt({
       ...baseRequest,
@@ -709,6 +730,18 @@ describe('AI command parsing', () => {
     const risk = analyzeAiCommands(commands)
     expect(risk.startsDebugOrCapture).toBe(true)
     expect(risk.hasCleanup).toBe(false)
+  })
+
+  it('recognizes explicit command requests and routes them to the catalog', () => {
+    expect(isCommandRequest('what command shows interface errors')).toBe(true)
+    expect(isCommandRequest('Which commands clear NAT translations?')).toBe(true)
+    expect(isCommandRequest('give me the command to capture traffic')).toBe(true)
+    expect(isCommandRequest('command to check CPU usage')).toBe(true)
+    expect(isCommandRequest('I need the CLI syntax for a packet capture')).toBe(true)
+    expect(isCommandRequest('the command failed with an error')).toBe(false)
+    expect(isCommandRequest('why is the tunnel flapping')).toBe(false)
+    expect(isCommandRequest('show version')).toBe(false)
+    expect(isCommandRequest('what command\nshows errors')).toBe(false)
   })
 
   it('detects text already typed after the prompt', () => {

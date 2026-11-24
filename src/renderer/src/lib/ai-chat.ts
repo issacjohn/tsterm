@@ -1,4 +1,4 @@
-import { isLoopbackUrl } from '@shared/ai-utils'
+import { isCommandRequest, isLoopbackUrl } from '@shared/ai-utils'
 import type { AiChatMessage, AsaCommandRecord } from '@shared/types'
 import { buildRetrievalQuery, collectAiContext } from './ai-context'
 import { getLocalModelState } from './ai-local'
@@ -64,6 +64,21 @@ export async function sendAiMessage(
   const prompt = (promptOverride ?? thread?.draft ?? '').trim()
   if (!prompt) return
   if (!state.settings.aiEnabled) return
+
+  if (promptOverride === undefined && isCommandRequest(prompt)) {
+    state.setAiThread(paneKey, { draft: '' })
+    state.setModal({
+      kind: 'command-browser',
+      query: prompt,
+      sessionId: pane.status === 'connected' ? pane.sessionId : undefined
+    })
+    state.notify({
+      kind: 'info',
+      title: 'Command browser',
+      message: 'Command requests are answered from the local ASA catalog. Only verified commands can be filled.'
+    })
+    return
+  }
 
   const profile =
     state.settings.aiProfiles.find((item) => item.id === state.settings.aiActiveProfileId) ??
@@ -141,7 +156,8 @@ export async function sendAiMessage(
       const catalog = await window.tsterm.commands.search({
         query: retrievalQuery,
         limit: 5,
-        useVector: true
+        useVector: true,
+        includeReference: !state.settings.aiStrictCommands
       })
       commandHints = catalog.matches.map((match) => formatCommandHint(match.record))
     } catch {
@@ -156,7 +172,8 @@ export async function sendAiMessage(
       context: {
         ...aiContext,
         referenceHints,
-        commandHints
+        commandHints,
+        strictCommands: state.settings.aiStrictCommands
       }
     })
 

@@ -287,6 +287,9 @@ export function buildSystemPrompt(request: AiChatRequest): string {
     '10. Never invent optional keywords or timer options. If you are not certain a keyword exists, use a simpler command from the runbook context and say what you are unsure about.',
     '    Cisco ASA example: capture has no duration keyword. Bound it with buffer/circular-buffer and remove it with no capture <name>.',
     '10b. Command records marked "documentation reference" are not device-verified. Use their syntax as reference only for the active ASA version and say that it should be checked against the device.',
+    context.strictCommands
+      ? '10c. Strict command grounding is on. Only present commands that are exact matches in the curated ASA catalog as runnable commands. Documentation reference syntax may be explained, but must not be presented as a verified or runnable command.'
+      : '',
     '11. Cisco ASA capture syntax is strict. Valid forms are:',
     '    capture TSTCAP interface inside match ip host 1.1.1.1 host 8.8.8.8',
     '    capture TSTCAP interface inside match ip 1.1.1.1 0.0.0.0 8.8.8.8 0.0.0.0',
@@ -616,7 +619,8 @@ export class AiService {
               deviceNotes: request.context.deviceNotes,
               runbookHints: request.context.runbookHints,
               referenceHints: request.context.referenceHints,
-              commandHints: request.context.commandHints
+              commandHints: request.context.commandHints,
+              strictCommands: request.context.strictCommands
             }
       })
       let url: string

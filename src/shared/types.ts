@@ -356,6 +356,7 @@ export interface AppSettings {
   aiEnabled: boolean
   aiActiveProfileId?: string
   aiProfiles: AiProfile[]
+  aiStrictCommands: boolean
   aiIncludeContext: boolean
   aiAutoPullLocalModels: boolean
 }
@@ -391,6 +392,7 @@ export interface AiChatContext {
   runbookHints?: string[]
   referenceHints?: string[]
   commandHints?: string[]
+  strictCommands?: boolean
 }
 
 export type CommandRisk = 'read_only' | 'diagnostic' | 'mutating' | 'destructive'
@@ -469,6 +471,27 @@ export interface CommandIndexProgress {
   percent?: number
   status?: string
   error?: string
+}
+
+export type CommandVerificationStatus = 'verified' | 'documented' | 'unknown'
+
+export interface CommandVerification {
+  command: string
+  status: CommandVerificationStatus
+  recordId?: string
+  risk?: CommandRisk
+  cleanup?: string[]
+  source?: string
+  reason?: string
+}
+
+export interface CommandVerifyRequest {
+  commands: string[]
+  strict?: boolean
+}
+
+export interface CommandVerifyResult {
+  results: CommandVerification[]
 }
 
 export interface CommandRouteCandidate {
@@ -883,6 +906,7 @@ export interface TstermApi {
     status(): Promise<CommandStatusResult>
     reload(): Promise<CommandStatusResult>
     search(request: CommandSearchRequest): Promise<CommandSearchResult>
+    verify(request: CommandVerifyRequest): Promise<CommandVerifyResult>
     buildIndex(profileId?: string): Promise<CommandStatusResult>
     ensureIndex(profileId?: string): Promise<CommandStatusResult>
     route(request: CommandRouteRequest): Promise<CommandRouteResult>

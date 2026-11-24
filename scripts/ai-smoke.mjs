@@ -26,6 +26,12 @@ const REPLY = [
   'no capture cap',
   '```',
   '',
+  'This one is invented and must not be fillable:',
+  '',
+  '```ciscoasa',
+  'show frobnicate summary',
+  '```',
+  '',
   'I have not run anything. Filling a line only stages it in the prompt.'
 ].join('\n')
 
@@ -180,6 +186,14 @@ try {
   if (sent.model !== MODEL) throw new Error(`Wrong model sent: ${sent.model}`)
   if (sent.stream !== true) throw new Error('Expected a streaming request.')
 
+  await page.waitForSelector('.ai-grounding.unknown', { timeout: 20000 })
+  const unknownFill = page
+    .locator('.ai-command-wrap', { hasText: 'show frobnicate summary' })
+    .locator('.ai-fill-btn')
+  if (await unknownFill.isEnabled()) {
+    throw new Error('Fill must be disabled for a command that is not in the local catalog.')
+  }
+
   const beforeRows = await page.locator('.xterm-rows > div').allInnerTexts()
   await page.locator('.ai-command-line .ai-fill-btn').first().click()
   await page.waitForTimeout(500)
@@ -196,6 +210,20 @@ try {
   if (/not recognized|CommandNotFound|is not recognized/i.test(transcript)) {
     throw new Error('The filled command appears to have been executed.')
   }
+
+  await page.locator('.ai-composer textarea').fill('what command shows interface errors')
+  const findCommand = page.getByRole('button', { name: /^Find command$/ })
+  if (!(await findCommand.count())) {
+    throw new Error('Explicit command requests should switch the composer action to Find command.')
+  }
+  await findCommand.click()
+  await page.waitForSelector('.command-browser-modal', { timeout: 10000 })
+  const browserQuery = await page.locator('.cmd-search input').inputValue()
+  if (browserQuery !== 'what command shows interface errors') {
+    throw new Error(`Command browser query mismatch: ${browserQuery}`)
+  }
+  await page.locator('.command-browser-modal .modal-close').click()
+  await page.waitForTimeout(300)
 
   await page.locator('.ts-mode-tabs button', { hasText: 'Assistant' }).click()
   await page.locator('.ts-mode-tabs button', { hasText: 'Runbooks' }).click()

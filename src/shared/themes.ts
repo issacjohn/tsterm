@@ -258,6 +258,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiActiveProfileId: 'local-ollama',
   aiIncludeContext: true,
   aiAutoPullLocalModels: true,
+  aiStrictCommands: true,
   aiProfiles: [
     {
       id: 'local-ollama',

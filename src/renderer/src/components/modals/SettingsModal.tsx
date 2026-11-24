@@ -1095,6 +1095,12 @@ export function SettingsModal({ tab = 'appearance', onClose }: SettingsModalProp
                     description="Adds the current command line and the last 80 terminal lines, with passwords and common secret fields redacted. Device type and matching runbook knowledge are always used."
                   />
                   <SettingToggle
+                    checked={settings.aiStrictCommands}
+                    onChange={(value) => update({ aiStrictCommands: value })}
+                    label="Strict command grounding"
+                    description="Only commands with an exact curated catalog match get one-click Fill. Documentation-only commands and unknown commands are clearly marked and cannot be filled."
+                  />
+                  <SettingToggle
                     checked={settings.aiAutoPullLocalModels}
                     onChange={(value) => update({ aiAutoPullLocalModels: value })}
                     label="Download local models automatically"

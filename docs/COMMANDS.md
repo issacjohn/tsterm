@@ -100,12 +100,39 @@ result came from `bm25`, `vector`, or `hybrid`.
 Free chat uses the same local catalog in addition to the runbook hints:
 
 - the top five hybrid matches are added to the system prompt as `commandHints`;
-- documentation reference entries are labelled as not device-verified;
+- documentation reference entries are labelled as not device-verified (and are excluded from free-chat hints
+  when strict command grounding is on);
 - runbook hints use partial, stemmed matching, so a natural-language question no longer
   has to contain every word from a runbook;
 - follow-up questions add `%ASA-...` syslog IDs and the last command line from the terminal to the local
   retrieval query, so “why did that fail?” can find the right runbook or reference;
 - live terminal output remains opt-in and is still marked untrusted in the prompt.
+
+### Assistant command grounding
+
+Every command that appears in an assistant reply — fenced or inline — is checked against the local catalog
+before it can be filled. The renderer calls `commands.verify()` and shows one of three states:
+
+| State | Meaning | Fill |
+| --- | --- | --- |
+| `verified` | Exact match for a curated template or example | Enabled |
+| `documented` | Prefix matches a Cisco documentation entry only | Disabled |
+| `unknown` | Not in the local catalog | Disabled |
+
+Each answer gets a summary banner, and each command line gets its own label. While the check is running,
+Fill is disabled and the line reads **Checking the local catalog…**. If the check fails, the command is
+treated as `unknown` and the UI says to verify it on the device.
+
+**Strict command grounding** is on by default (`Settings → AI → Strict command grounding`). In strict mode,
+documentation-only syntax may be explained but is never presented as a runnable command, and reference
+entries are excluded from the free-chat command hints.
+
+Explicit command requests (“what command shows interface errors?”, “command to capture traffic”) are not
+sent to the model. The composer button changes to **Find command** and opens the command browser with the
+question as the query, so the answer comes from the catalog and the deterministic router.
+
+Unknown commands remain visible so you can still discuss them, but they cannot be filled. Copying and
+saving a snippet are always available; neither action runs anything.
 
 ### Automatic hybrid setup
 
@@ -181,6 +208,10 @@ provenance checks.
 - Menu: **Session → ASA Command Reference** (`Ctrl+Shift+J`).
 - Command palette: **ASA command reference**.
 - AI panel: the **Commands** chip opens the browser with the current draft as the query.
+- AI panel: an explicit command request changes **Ask** to **Find command** and opens the browser directly;
+  the free-chat model is not called for command lookup.
+- Command answers mark every command as verified, documented, or unknown; only exact curated matches can be
+  filled.
 - Search by command, keyword, symptom, interface, or exact token.
 - Filter by risk.
 - Select a fillable record, fill parameters, review the preview, then **Fill**, **Copy**, or **Snippet**.
@@ -229,6 +260,11 @@ certificate, and interface questions, and verifies that Qwen3 8B:
   ports can never be substituted for the user's values.
 - The 2,510 Cisco reference entries are documentation aids, not parameterized recipes. Their syntax is
   normalized from Cisco's HTML tables; verify unusual bracket/pipe formatting against the linked page.
+- Assistant grounding trusts the local catalog. If the catalog lacks a valid version-specific command, the
+  command is marked unknown and cannot be filled until the catalog is extended (for example from live ASA
+  `?` help).
+- Grounding checks the rendered text against curated templates and examples. A command with substituted
+  values is verified only when it matches a template's structure.
 - Syslog IDs are tokenized and searchable, but the reference import does not yet map IDs to commands.
 - The router currently requires a local Ollama provider. Cloud providers remain available for free chat.
 - Qwen3 8B is the recommended router. A 3B model may produce valid JSON but weaker candidate selection.

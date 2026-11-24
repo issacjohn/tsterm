@@ -142,6 +142,7 @@ const api: TstermApi = {
     status: () => ipcRenderer.invoke('commands:status'),
     reload: () => ipcRenderer.invoke('commands:reload'),
     search: (request) => ipcRenderer.invoke('commands:search', request),
+    verify: (request) => ipcRenderer.invoke('commands:verify', request),
     buildIndex: (profileId?: string) => ipcRenderer.invoke('commands:index-vectors', profileId),
     ensureIndex: (profileId?: string) => ipcRenderer.invoke('commands:ensure-index', profileId),
     route: (request) => ipcRenderer.invoke('commands:route', request),

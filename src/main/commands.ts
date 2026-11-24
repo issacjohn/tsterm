@@ -11,8 +11,12 @@ import type {
   CommandSearchMatch,
   CommandSearchRequest,
   CommandSearchResult,
-  CommandStatusResult
+  CommandStatusResult,
+  CommandVerification,
+  CommandVerifyRequest,
+  CommandVerifyResult
 } from '@shared/types'
+import { stripPromptPrefix } from '@shared/ai-utils'
 import { extractPlaceholders, renderCommand, validateParameter } from '@shared/command-utils'
 import { isOllamaProfile, ollamaBase } from './ai'
 import type { Store } from './store'
@@ -135,6 +139,29 @@ function tokenize(text: string): string[] {
 
 function normalizeForMatch(value: string): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function normalizeCommand(value: string): string {
+  return normalizeForMatch(stripPromptPrefix(value))
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function compileCommandTemplate(template: string): { regex: RegExp; names: string[] } {
+  const names: string[] = []
+  const source = template
+    .split(/(\{[a-zA-Z0-9_]+\})/)
+    .map((part) => {
+      if (/^\{[a-zA-Z0-9_]+\}$/.test(part)) {
+        names.push(part.slice(1, -1))
+        return '([^\\s]+)'
+      }
+      return escapeRegExp(part)
+    })
+    .join('')
+  return { regex: new RegExp(`^${source}$`, 'i'), names }
 }
 
 function commandText(record: AsaCommandRecord): string {
@@ -302,6 +329,14 @@ export class CommandService {
   private df = new Map<string, number>()
   private avgLength = 1
   private embeddings = new Map<string, EmbeddingEntry>()
+  private exactCurated = new Map<string, AsaCommandRecord>()
+  private templateMatchers: Array<{
+    record: AsaCommandRecord
+    regex: RegExp
+    names: string[]
+    specificity: number
+  }> = []
+  private documentedNames = new Map<string, AsaCommandRecord>()
   private dimensions = 0
   private indexing = false
   private vectorError: string | undefined
@@ -382,14 +417,35 @@ export class CommandService {
 
   private rebuildIndex(): void {
     this.df = new Map()
+    this.exactCurated = new Map()
+    this.templateMatchers = []
+    this.documentedNames = new Map()
     this.docs = this.records.map((record) => {
       const tokens = tokenize(commandText(record))
       const unique = new Set(tokens)
       for (const token of unique) this.df.set(token, (this.df.get(token) ?? 0) + 1)
+      if (record.referenceOnly) {
+        this.documentedNames.set(normalizeCommand(record.commandTemplate), record)
+      } else {
+        this.exactCurated.set(normalizeCommand(record.commandTemplate), record)
+        for (const example of record.examples) {
+          this.exactCurated.set(normalizeCommand(example), record)
+        }
+        if (/\{[a-zA-Z0-9_]+\}/.test(record.commandTemplate)) {
+          const compiled = compileCommandTemplate(record.commandTemplate)
+          this.templateMatchers.push({
+            record,
+            regex: compiled.regex,
+            names: compiled.names,
+            specificity: record.commandTemplate.replace(/\{[a-zA-Z0-9_]+\}/g, '').length
+          })
+        }
+      }
       return { record, tokens, length: tokens.length }
     })
     const totalLength = this.docs.reduce((sum, doc) => sum + doc.length, 0)
     this.avgLength = this.docs.length ? totalLength / this.docs.length : 1
+    this.templateMatchers.sort((left, right) => right.specificity - left.specificity)
   }
 
   private cacheFile(): string {
@@ -881,6 +937,93 @@ export class CommandService {
     const vectors = await this.embedBatch(baseUrl, [query.slice(0, 2000)])
     if (!vectors[0]?.length) throw new Error('Ollama returned an empty query embedding.')
     return normalizeVector(vectors[0])
+  }
+
+  verifyCommands(request: CommandVerifyRequest): CommandVerifyResult {
+    const commands = Array.isArray(request?.commands)
+      ? request.commands
+          .filter((command): command is string => typeof command === 'string')
+          .slice(0, 50)
+      : []
+    return {
+      results: commands.map((command) => this.verifyCommand(command, request?.strict === true))
+    }
+  }
+
+  private verifyCommand(command: string, strict: boolean): CommandVerification {
+    const raw = command.trim().slice(0, 500)
+    const stripped = stripPromptPrefix(raw).replace(/\s+/g, ' ').trim()
+    const normalized = stripped.toLowerCase()
+    if (!normalized) {
+      return { command: raw, status: 'unknown', reason: 'The command is empty.' }
+    }
+
+    const exact = this.exactCurated.get(normalized)
+    if (exact) {
+      return {
+        command: raw,
+        status: 'verified',
+        recordId: exact.id,
+        risk: exact.risk,
+        cleanup: exact.cleanup,
+        source: exact.source
+      }
+    }
+
+    for (const matcher of this.templateMatchers) {
+      const match = matcher.regex.exec(stripped)
+      if (!match) continue
+      const valuesAreValid = matcher.names.every((name, index) => {
+        const parameter = matcher.record.parameters.find((item) => item.name === name)
+        return !parameter || validateParameter(parameter, match[index + 1]) === null
+      })
+      if (!valuesAreValid) {
+        return {
+          command: raw,
+          status: 'unknown',
+          risk: matcher.record.risk,
+          source: matcher.record.source,
+          reason:
+            'The command resembles a catalog template, but a parameter value does not match the recorded format. Verify it on the device.'
+        }
+      }
+      return {
+        command: raw,
+        status: 'verified',
+        recordId: matcher.record.id,
+        risk: matcher.record.risk,
+        cleanup: matcher.record.cleanup,
+        source: matcher.record.source
+      }
+    }
+
+    const tokens = normalized.split(' ').filter(Boolean)
+    let documented: AsaCommandRecord | undefined
+    for (let count = tokens.length; count > 0; count -= 1) {
+      const candidate = this.documentedNames.get(tokens.slice(0, count).join(' '))
+      if (candidate) {
+        documented = candidate
+        break
+      }
+    }
+    if (documented) {
+      return {
+        command: raw,
+        status: 'documented',
+        recordId: documented.id,
+        risk: documented.risk,
+        source: documented.source,
+        reason: strict
+          ? 'Documentation reference only. Strict command grounding allows only exact curated matches.'
+          : 'Cisco documentation reference; not parameterized or device-verified. Verify it on the device.'
+      }
+    }
+
+    return {
+      command: raw,
+      status: 'unknown',
+      reason: 'Not in the local ASA catalog. Verify it on the device before running it.'
+    }
   }
 
   async search(request: CommandSearchRequest): Promise<CommandSearchResult> {

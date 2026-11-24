@@ -8957,3 +8957,87 @@ input[type="range"] {
 .cmd-preview-state.reference {
   color: var(--info);
 }
+
+/* ------------------------------------------------- AI command grounding */
+
+.ai-grounding-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0 0 6px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+
+.ai-grounding-summary svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ai-grounding-summary.verified {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ai-grounding-summary.documented,
+.ai-grounding-summary.pending {
+  border-color: color-mix(in srgb, var(--amber) 28%, var(--border));
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.ai-grounding-summary.unknown {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ai-command-wrap + .ai-command-wrap {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.ai-grounding {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px 5px 9px;
+  color: var(--faint);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.ai-grounding.verified {
+  color: var(--accent);
+}
+
+.ai-grounding.documented {
+  color: var(--amber);
+}
+
+.ai-grounding.unknown {
+  color: var(--danger);
+}
+
+.ai-grounding.pending {
+  color: var(--faint);
+}
+
+.ai-inline-command.documented {
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--border));
+  color: var(--amber);
+}
+
+.ai-inline-command.unknown {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+  color: var(--danger);
+}
+
+.ai-inline-command:disabled {
+  cursor: not-allowed;
+}

@@ -78,6 +78,37 @@ describe('command catalog', () => {
     expect(curatedOnly.matches.every((match) => !match.record.referenceOnly)).toBe(true)
   })
 
+  it('grounds chat commands as verified, documented, or unknown', () => {
+    const commands = service()
+    const result = commands.verifyCommands({
+      commands: [
+        'show version',
+        'capture TSTCAP interface outside match ip host 10.1.1.1 host 8.8.8.8',
+        'show tech-support details',
+        'frobnicate all interfaces'
+      ],
+      strict: true
+    })
+    expect(result.results.map((item) => item.status)).toEqual([
+      'verified',
+      'verified',
+      'documented',
+      'unknown'
+    ])
+    expect(result.results[0].recordId).toBeTruthy()
+    expect(result.results[1].recordId).toContain('capture-host')
+    expect(result.results[2].reason).toMatch(/strict/i)
+    expect(result.results[3].reason).toMatch(/not in the local ASA catalog/i)
+
+    const casing = commands.verifyCommands({ commands: ['SHOW VERSION'] })
+    expect(casing.results[0].status).toBe('verified')
+
+    const invalidValues = commands.verifyCommands({
+      commands: ['capture TSTCAP interface outside match ip host 999.999.999.999 host 8.8.8.8']
+    })
+    expect(invalidValues.results[0].status).not.toBe('verified')
+  })
+
   it('finds capture commands for a natural-language symptom', async () => {
     const commands = service()
     const result = await commands.search({
