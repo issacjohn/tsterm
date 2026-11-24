@@ -19,7 +19,7 @@ import {
   splitActivePane
 } from '../lib/session-actions'
 import { clearTerminal, copySelection, focusTerminal } from '../lib/terminal-registry'
-import { cx, truncate } from '../lib/format'
+import { cx } from '../lib/format'
 
 interface SessionToolbarProps {
   onToggleTroubleshoot: () => void
@@ -85,7 +85,6 @@ export function SessionToolbar({ onToggleTroubleshoot }: SessionToolbarProps): R
                 }}
                 title="Change device type"
               >
-                <span className="device-vendor">{truncate(deviceType.vendor, 12)}</span>
                 <span>{deviceType.name}</span>
               </button>
             ) : (

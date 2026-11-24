@@ -150,7 +150,7 @@ function createWindow(): void {
     minHeight: 680,
     show: false,
     title: 'TSTerm',
-    backgroundColor: '#0a1016',
+    backgroundColor: '#080907',
     autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

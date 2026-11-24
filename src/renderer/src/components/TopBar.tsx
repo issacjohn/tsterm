@@ -5,7 +5,6 @@ import {
   RefreshCw,
   Settings,
   ShieldAlert,
-  Sparkles,
   TerminalSquare
 } from 'lucide-react'
 import { useAppStore } from '../store'
@@ -60,7 +59,7 @@ export function TopBar({
 
       <button className="command-trigger" onClick={onOpenPalette} title={`Open command palette (${mod}+Shift+P)`}>
         <Command size={15} />
-        <span>Search hosts, devices, commands…</span>
+        <span>Search devices, commands, runbooks…</span>
         <span className="shortcut">
           <kbd>{mod}</kbd>
           <kbd>⇧</kbd>
@@ -70,18 +69,19 @@ export function TopBar({
 
       <div className="topbar-actions">
         <span className={`connection-count${connected ? ' live' : ''}`} title={`${connected} live session${connected === 1 ? '' : 's'}`}>
-          <TerminalSquare size={14} />
-          <span>{connected || '—'}</span>
+          <TerminalSquare size={13} />
+          <span>{connected || '0'}</span>
+          {connected ? <em>live</em> : null}
         </span>
 
         {debugSessions.length > 0 ? (
           <button className="debug-chip" onClick={onOpenDebug} title="Review active debug sessions">
-            <ShieldAlert size={14} />
+            <ShieldAlert size={13} />
             <span>{debugSessions.length}</span>
             <span className="debug-label">debug{debugSessions.length === 1 ? '' : 's'}</span>
           </button>
         ) : (
-          <button className="icon-btn" onClick={onOpenDebug} title="Debug session guard">
+          <button className="icon-btn" onClick={onOpenDebug} title="Debug session guard" aria-label="Debug session guard">
             <ShieldAlert size={17} />
           </button>
         )}
@@ -98,14 +98,22 @@ export function TopBar({
             <RefreshCw size={12} className={cx(checking && 'spin')} />
           </button>
         </div>
-        <button className="icon-btn" onClick={onToggleSidebar} title="Toggle sidebar">
-          <PanelLeft size={18} />
+        <span className="topbar-sep" />
+        <button
+          className="icon-btn"
+          onClick={onToggleSidebar}
+          title="Toggle sidebar"
+          aria-label="Toggle sidebar"
+        >
+          <PanelLeft size={17} />
         </button>
-        <button className="icon-btn" onClick={onOpenSettings} title={`Settings (${mod}+,)`}>
-          <Settings size={18} />
-        </button>
-        <button className="icon-btn subtle" onClick={onOpenPalette} title="Command palette">
-          <Sparkles size={16} />
+        <button
+          className="icon-btn"
+          onClick={onOpenSettings}
+          title={`Settings (${mod}+,)`}
+          aria-label="Settings"
+        >
+          <Settings size={17} />
         </button>
       </div>
     </header>

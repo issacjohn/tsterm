@@ -202,7 +202,7 @@ try {
   if (assistantText.includes('show frobnicate summary')) {
     throw new Error('Strict mode rendered a command that is not in the ASA catalog.')
   }
-  if (!/hidden — not in the ASA 9\.24\(10\) catalog/i.test(assistantText)) {
+  if (!/hidden — not in the local Cisco ASA catalog/i.test(assistantText)) {
     throw new Error('Strict mode did not report hidden unverified commands.')
   }
 

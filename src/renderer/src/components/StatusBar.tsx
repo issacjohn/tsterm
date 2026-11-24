@@ -9,7 +9,6 @@ export function StatusBar(): React.JSX.Element {
   const session = pane?.session
   const connected = pane?.status === 'connected'
   const debugCount = state.debugSessions.length
-  const version = state.bootstrap?.appVersion ?? '0.1.0'
 
   return (
     <footer className="statusbar">
@@ -48,11 +47,6 @@ export function StatusBar(): React.JSX.Element {
       </div>
 
       <div className="status-right">
-        {state.settings.inlineSuggestions ? (
-          <span className="status-hint" title="Inline next-word suggestions from the command catalog">
-            <kbd>Tab</kbd> accept suggestion
-          </span>
-        ) : null}
         <button
           className="status-link"
           onClick={() => state.setModal({ kind: 'settings', tab: 'appearance' })}
@@ -60,16 +54,14 @@ export function StatusBar(): React.JSX.Element {
         >
           {state.settings.fontSize}px
         </button>
-        <span className="status-encoding">UTF-8</span>
-        <span className="status-version">v{version}</span>
+        <span className="status-sep" />
         <button
           className="bmac-link"
           onClick={() => void window.tsterm.app.openExternal('https://buymeacoffee.com/issac_john')}
           title="Buy me a coffee"
           aria-label="Buy me a coffee"
         >
-          <Coffee size={14} />
-          <span>buy me a coffee</span>
+          <Coffee size={13} />
         </button>
       </div>
     </footer>

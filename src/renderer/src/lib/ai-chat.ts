@@ -150,7 +150,8 @@ export async function sendAiMessage(
     state.notify({
       kind: 'info',
       title: 'Command browser',
-      message: 'Command requests are answered from the local ASA catalog. Only verified commands can be filled.'
+      message:
+        "Command requests are answered from the active device's local catalog. Only verified commands can be filled."
     })
     return
   }

@@ -160,17 +160,19 @@ export function Sidebar({ onOpenSettings }: SidebarProps): React.JSX.Element {
       <div className="sidebar-head">
         <div>
           <span className="eyebrow">Workspace</span>
-          <h2>Devices</h2>
+          <h2>
+            Devices <span className="sidebar-count">{hosts.length}</span>
+          </h2>
         </div>
         <div className="sidebar-head-actions">
-          <button className="icon-btn" onClick={() => void importHosts()} title="Import hosts">
-            <Download size={16} />
+          <button className="icon-btn" onClick={() => void importHosts()} title="Import hosts" aria-label="Import hosts">
+            <Download size={15} />
           </button>
-          <button className="icon-btn" onClick={() => void exportHosts()} title="Export hosts">
-            <Upload size={16} />
+          <button className="icon-btn" onClick={() => void exportHosts()} title="Export hosts" aria-label="Export hosts">
+            <Upload size={15} />
           </button>
-          <button className="icon-btn accent" onClick={() => openHostEditor()} title="Add a device">
-            <Plus size={18} />
+          <button className="icon-btn accent" onClick={() => openHostEditor()} title="Add a device" aria-label="Add a device">
+            <Plus size={17} />
           </button>
         </div>
       </div>
@@ -178,20 +180,13 @@ export function Sidebar({ onOpenSettings }: SidebarProps): React.JSX.Element {
       <div className="sidebar-quick">
         <button className="quick-card" onClick={() => openHostEditor()}>
           <span className="quick-icon">
-            <Server size={17} />
+            <Server size={16} />
           </span>
           <span>
-            <strong>New SSH connection</strong>
-            <small>Cisco, Palo Alto, Meraki, any SSH host</small>
+            <strong>New connection</strong>
+            <small>SSH · any network device</small>
           </span>
           <Plus size={14} className="quick-plus" />
-        </button>
-        <button className="quick-local" onClick={() => openLocalTerminal()}>
-          <Laptop size={14} />
-          Local terminal
-          <span className="count">
-            {useAppStore.getState().appPlatform === 'win32' ? 'PS' : useAppStore.getState().appPlatform === 'darwin' ? 'zsh' : 'sh'}
-          </span>
         </button>
       </div>
 
@@ -252,7 +247,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps): React.JSX.Element {
                       }
                     }}
                   >
-                    <div className="host-avatar" style={{ background: avatarColor(host) }}>
+                    <div
+                      className="host-avatar"
+                      style={{ '--avatar': avatarColor(host) } as React.CSSProperties}
+                    >
                       {initials(host.label)}
                       {live ? <span className="live-dot" /> : null}
                     </div>

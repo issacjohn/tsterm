@@ -147,6 +147,10 @@ function sanitizeSettings(input: unknown): AppSettings {
   merged.density = merged.density === 'compact' ? 'compact' : 'comfortable'
   merged.bellStyle = merged.bellStyle === 'sound' ? 'sound' : 'none'
   merged.uiFontFamily = asString(merged.uiFontFamily, DEFAULT_SETTINGS.uiFontFamily)
+  // Move the old stock UI font forward. A deliberate custom choice is untouched.
+  if (merged.uiFontFamily === '"Inter", "Segoe UI", system-ui, -apple-system, sans-serif') {
+    merged.uiFontFamily = DEFAULT_SETTINGS.uiFontFamily
+  }
   merged.fontFamily = asString(merged.fontFamily, DEFAULT_SETTINGS.fontFamily)
   merged.localShell = asString(merged.localShell, '')
   merged.localShellArgs = asStringArray(merged.localShellArgs, [])

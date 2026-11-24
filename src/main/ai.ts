@@ -106,7 +106,7 @@ function authHeaders(profile: AiProfile, key?: string): Record<string, string> {
   return { Authorization: `Bearer ${key}` }
 }
 
-const TSTERM_USER_AGENT = 'TSTerm/0.5.6'
+const TSTERM_USER_AGENT = 'TSTerm/0.6.0'
 
 function isOpenCodeGoProfile(profile: AiProfile): boolean {
   try {

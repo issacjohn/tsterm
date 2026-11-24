@@ -56,6 +56,22 @@ const RISK_FILTERS: Array<{ id: RiskFilter; label: string }> = [
   { id: 'destructive', label: 'Destructive' }
 ]
 
+const QUICK_SEARCHES: Record<string, string[]> = {
+  'cisco-asa': ['show interface', 'packet-tracer', 'capture', 'show conn'],
+  'cisco-ftd': ['show interface', 'packet tracer', 'show running-config', 'capture'],
+  'cisco-fmc': ['show', 'inspect', 'trace', 'policy'],
+  'cisco-ios': ['show ip interface', 'show ip route', 'debug', 'ping'],
+  'cisco-nxos': ['show interface', 'show ip route', 'show tech', 'traceroute'],
+  'cisco-9800': ['show client', 'show interface', 'debug client', 'show wlan'],
+  'cisco-wlc-aireos': ['show client', 'show interface', 'debug client', 'show wlan'],
+  'cisco-meraki': ['show', 'ping', 'traceroute', 'arp'],
+  'paloalto-panos': ['show interface', 'show session', 'test routing', 'packet-diag'],
+  windows: ['Get-NetTCPConnection', 'Test-NetConnection', 'Resolve-DnsName', 'Get-NetFirewallRule'],
+  linux: ['ip addr', 'ss -tulpn', 'journalctl', 'tcpdump'],
+  macos: ['ifconfig', 'netstat', 'scutil --dns', 'tcpdump'],
+  'generic-network': ['show interface', 'show ip route', 'ping', 'traceroute']
+}
+
 function riskClass(risk: CommandRisk): string {
   if (risk === 'read_only') return 'safe'
   if (risk === 'destructive') return 'danger'
@@ -102,6 +118,7 @@ export function CommandBrowserModal(): React.JSX.Element | null {
   const deviceType = useAppStore((state) =>
     state.catalog.types.find((type) => type.id === deviceTypeId)
   )
+  const quickSearches = deviceType ? QUICK_SEARCHES[deviceType.id] ?? [] : []
 
   const [query, setQuery] = useState(browser?.query ?? '')
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
@@ -434,7 +451,9 @@ export function CommandBrowserModal(): React.JSX.Element | null {
               ? 'Select a device type'
               : vectorReady
                 ? `Hybrid · ${status?.vectorCount ?? 0}/${status?.vectorTargetCount ?? 0} embedded`
-                : `BM25 · ${result?.total ?? 0} eligible`}
+                : result
+                  ? `BM25 · ${result.total} eligible`
+                  : 'BM25 · device-scoped'}
             {deviceType ? <em>{deviceType.name}</em> : null}
             {vectorReady && status?.vectorModel ? <em>{status.vectorModel}</em> : null}
           </div>
@@ -619,15 +638,26 @@ export function CommandBrowserModal(): React.JSX.Element | null {
         <div className="cmd-results">
           {!query.trim() ? (
             <div className="cmd-empty">
-              <Search size={20} />
-              <strong>Search the ASA catalog</strong>
+              <div className="cmd-empty-mark">
+                <Search size={17} />
+              </div>
+              <strong>{deviceType ? `Search the ${deviceType.name} catalog` : 'Search the command catalog'}</strong>
               <p>
-                Try “capture traffic between two hosts”, “vpn tunnel not coming up”, “show interface”,
-                or an exact token like <code>%ASA-4-106023</code>.
+                Try a command name, a symptom like “DNS not resolving”, a service like “firewall rule”,
+                or an exact token or syslog ID.
               </p>
+              {quickSearches.length ? (
+                <div className="cmd-quick-searches">
+                  <span>Try</span>
+                  {quickSearches.map((term) => (
+                    <button key={term} onClick={() => setQuery(term)}>
+                      {term}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <span>
-                {status?.total ?? 0} records across device packs: fillable runbooks, complete examples, and
-                imported references.
+                Only this device&apos;s records are searched. Other device packs are ignored.
               </span>
             </div>
           ) : searching && !result ? (

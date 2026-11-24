@@ -214,9 +214,9 @@ function TerminalPreview(): React.JSX.Element {
 }
 
 const APP_THEMES: Array<{ id: AppThemeId; name: string; note: string; colors: string[] }> = [
-  { id: 'midnight', name: 'Midnight', note: 'Deep blue-black', colors: ['#0a1016', '#101c24', '#57e6c2'] },
-  { id: 'graphite', name: 'Graphite', note: 'Neutral charcoal', colors: ['#101214', '#1a1e22', '#b9f27c'] },
-  { id: 'daylight', name: 'Daylight', note: 'Warm light', colors: ['#f4f1ea', '#ffffff', '#147d70'] }
+  { id: 'midnight', name: 'Carbon', note: 'Signal lime on warm black', colors: ['#080907', '#141712', '#c9f45a'] },
+  { id: 'graphite', name: 'Copper', note: 'Warm charcoal and copper', colors: ['#0e0c0b', '#1c1713', '#eda05c'] },
+  { id: 'daylight', name: 'Paper', note: 'Warm paper and olive ink', colors: ['#efebe2', '#fbf8f1', '#506b12'] }
 ]
 
 function ThemeTile({ theme, active, onClick }: { theme: TerminalTheme; active: boolean; onClick: () => void }): React.JSX.Element {

@@ -440,18 +440,20 @@ function AssistantMessage({
               hiddenCount ? (
                 <>
                   <AlertTriangle size={12} /> {hiddenCount} command
-                  {hiddenCount === 1 ? '' : 's'} hidden — not in the ASA 9.24(10) catalog. Showing only
-                  verified commands.
+                  {hiddenCount === 1 ? '' : 's'} hidden — not in the local {deviceType?.name ?? 'device'}{' '}
+                  catalog. Showing only verified commands.
                 </>
               ) : counts.deviceHelp ? (
                 <>
                   <ShieldCheck size={12} /> All {counts.verified + counts.deviceHelp} commands recognized
-                  in the ASA 9.24(10) catalog ({counts.verified} curated, {counts.deviceHelp} device help).
+                  in the local {deviceType?.name ?? 'device'} catalog ({counts.verified} curated,{' '}
+                  {counts.deviceHelp} device help).
                 </>
               ) : (
                 <>
                   <ShieldCheck size={12} /> All {counts.verified} command
-                  {counts.verified === 1 ? '' : 's'} verified in the local ASA catalog.
+                  {counts.verified === 1 ? '' : 's'} verified in the local {deviceType?.name ?? 'device'}{' '}
+                  catalog.
                 </>
               )
             ) : counts.unknown ? (
@@ -752,12 +754,14 @@ export function AiChatPanel(): React.JSX.Element {
         </div>
       </div>
 
-      {!type ? (
-        <div className="ai-scope-line warn">
-          <BookOpen size={11} />
-          <span>Select a device type to scope the assistant and its commands.</span>
-        </div>
-      ) : null}
+      <div className={cx('ai-scope-line', !type && 'warn')}>
+        <BookOpen size={11} />
+        <span>
+          {type
+            ? `${type.name} runbooks only — other device packs are ignored.`
+            : 'Select a device type to scope the assistant and its commands.'}
+        </span>
+      </div>
 
       {profile && isSmallModelName(profile.model) ? (
         <div className="ai-model-quality-banner">
