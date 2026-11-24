@@ -153,7 +153,8 @@ The boundary is deliberate and enforced in the app architecture:
 - Command parsing strips device prompts, ANSI sequences, control characters, and bidi overrides.
 - `Copy` and `Snippet` are explicit actions; nothing runs automatically.
 - Context is opt-in. When enabled, TSTerm sends the device type, matching runbook hints, the current
-  command line, and the last 80 terminal lines. Common password/secret fields are redacted first.
+  command line, and the last 400 terminal lines (up to 24,000 characters). Common password/secret fields are
+  redacted first.
 
 Cloud API keys are encrypted with Electron `safeStorage` and are never returned to the renderer. Local
 endpoints such as `http://127.0.0.1:11434/v1` keep the conversation on your machine. Each request goes

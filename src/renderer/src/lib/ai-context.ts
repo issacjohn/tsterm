@@ -26,8 +26,8 @@ export {
 export type { AiBlock, AiSegment } from '@shared/ai-utils'
 export { buildRunbookHints } from '@shared/ai-knowledge'
 
-const MAX_TAIL_LINES = 80
-const MAX_TAIL_CHARS = 6000
+const MAX_TAIL_LINES = 400
+const MAX_TAIL_CHARS = 24000
 
 export interface TerminalSnapshot {
   tail?: string

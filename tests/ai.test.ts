@@ -626,6 +626,16 @@ describe('AI system prompt', () => {
     expect(relaxed).not.toContain('Strict command grounding is on')
   })
 
+  it('passes through a larger terminal tail up to the new context limit', () => {
+    const tail = `${'a'.repeat(12000)}MIDDLE${'b'.repeat(12000)}`
+    const prompt = buildSystemPrompt({
+      ...baseRequest,
+      includeContext: true,
+      context: { deviceTypeName: 'Cisco ASA', vendor: 'Cisco', family: 'ASA', terminalTail: tail }
+    })
+    expect(prompt).toContain('MIDDLE')
+  })
+
   it('does not inject the ASA command index into other platforms', () => {
     const prompt = buildSystemPrompt({
       ...baseRequest,

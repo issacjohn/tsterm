@@ -15,7 +15,7 @@ import { isLoopbackUrl, stripThinkTags, ThinkTagFilter } from '@shared/ai-utils'
 import { buildAsaCommandIndex } from '@shared/asa-commands'
 import type { Store } from './store'
 
-const MAX_CONTEXT_CHARS = 7000
+const MAX_CONTEXT_CHARS = 24000
 const MAX_MESSAGE_CHARS = 12000
 const MAX_HISTORY = 12
 
@@ -106,7 +106,7 @@ function authHeaders(profile: AiProfile, key?: string): Record<string, string> {
   return { Authorization: `Bearer ${key}` }
 }
 
-const TSTERM_USER_AGENT = 'TSTerm/0.5.3'
+const TSTERM_USER_AGENT = 'TSTerm/0.5.4'
 
 function isOpenCodeGoProfile(profile: AiProfile): boolean {
   try {
