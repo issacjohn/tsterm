@@ -364,6 +364,45 @@ describe('local Ollama model management', () => {
     expect(isLoopbackUrl('not a url')).toBe(false)
   })
 
+  it('adds OpenCode Go session headers to model and chat requests', async () => {
+    const profile = testProfile({
+      id: 'opencode-go',
+      name: 'OpenCode Go',
+      baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+      model: 'deepseek-v4.1-flash'
+    })
+    const fetchSpy = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        expect(String(url)).toBe('https://opencode.ai/inference/go/openai/v1/models')
+        const headers = init?.headers as Record<string, string>
+        expect(headers['x-opencode-session']).toBe('models-opencode-go')
+        expect(headers['User-Agent']).toMatch(/^TSTerm\//)
+        return new Response(JSON.stringify({ data: [{ id: 'deepseek-v4.1-flash' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const service = new AiService(
+        fakeStore(
+          {
+            aiEnabled: true,
+            aiProfiles: [profile],
+            aiActiveProfileId: profile.id
+          },
+          'test-key'
+        )
+      )
+      const result = await service.listModels({ profile, apiKey: 'test-key' })
+      expect(result.ok).toBe(true)
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('reports Ollama models and matches the :latest tag', async () => {
     const store = fakeStore(
       { aiEnabled: true, aiProfiles: [ollamaProfile], aiActiveProfileId: ollamaProfile.id },

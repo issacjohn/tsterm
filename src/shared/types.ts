@@ -562,6 +562,7 @@ export type AiReferenceSearchResult =
 
 export interface AiChatRequest {
   requestId: string
+  sessionId?: string
   profileId: string
   messages: AiChatMessage[]
   context: AiChatContext

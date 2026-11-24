@@ -106,6 +106,30 @@ function authHeaders(profile: AiProfile, key?: string): Record<string, string> {
   return { Authorization: `Bearer ${key}` }
 }
 
+const TSTERM_USER_AGENT = 'TSTerm/0.5.3'
+
+function isOpenCodeGoProfile(profile: AiProfile): boolean {
+  try {
+    const url = new URL(profile.baseUrl)
+    if (url.hostname !== 'opencode.ai' && url.hostname !== 'www.opencode.ai') return false
+    return /^\/inference\/go(?:\/|$)/i.test(url.pathname) || /^\/zen\/go(?:\/|$)/i.test(url.pathname)
+  } catch {
+    return false
+  }
+}
+
+function openCodeGoHeaders(profile: AiProfile, sessionId?: string): Record<string, string> {
+  if (!isOpenCodeGoProfile(profile)) return {}
+  const session =
+    String(sessionId ?? 'tsterm-session')
+      .replace(/[^A-Za-z0-9._:-]/g, '')
+      .slice(0, 128) || 'tsterm-session'
+  return {
+    'x-opencode-session': session,
+    'User-Agent': TSTERM_USER_AGENT
+  }
+}
+
 function cleanMessagesForProvider(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
@@ -596,7 +620,8 @@ export class AiService {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        ...authHeaders(profile, key)
+        ...authHeaders(profile, key),
+        ...openCodeGoHeaders(profile, request.sessionId ?? request.requestId)
       }
       const messages = cleanMessagesForProvider(
         request.messages.slice(-MAX_HISTORY).map((message) => ({
@@ -752,7 +777,8 @@ export class AiService {
       secret = key
       const headers: Record<string, string> = {
         Accept: 'application/json',
-        ...authHeaders(profile, key)
+        ...authHeaders(profile, key),
+        ...openCodeGoHeaders(profile, `models-${profile.id}`)
       }
       let url: string
       if (profile.kind === 'anthropic') {

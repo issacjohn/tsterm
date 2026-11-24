@@ -251,7 +251,8 @@ export async function sendAiMessage(
         referenceHints,
         commandHints,
         strictCommands: state.settings.aiStrictCommands
-      }
+      },
+      sessionId: paneKey
     })
 
     const latest = useAppStore.getState().aiThreads[paneKey]
